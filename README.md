@@ -1,4 +1,4 @@
-# De-hype Financial News (Monorepo)
+# De-hype Financial News 
 
 **De-hype Financial News** is a full-stack app that turns noisy market headlines into a structured, factual brief. Paste a **news URL** (or the article **text**) to extract claims, identify companies, measure hype language, and view a **1‑month stock chart + % change** for companies that can be resolved to public tickers.
 
