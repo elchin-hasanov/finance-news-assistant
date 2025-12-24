@@ -1,0 +1,170 @@
+ticker,security
+AAPL,Apple Inc.
+MSFT,Microsoft Corporation
+AMZN,Amazon.com, Inc.
+GOOGL,Alphabet Inc. (Class A)
+GOOG,Alphabet Inc. (Class C)
+BRK.B,Berkshire Hathaway (Class B)
+NVDA,NVIDIA Corporation
+TSLA,Tesla, Inc.
+JPM,JPMorgan Chase & Co.
+JNJ,Johnson & Johnson
+V,Visa Inc.
+PG,Procter & Gamble
+XOM,Exxon Mobil Corporation
+CVX,Chevron Corporation
+WMT,Walmart Inc.
+HD,The Home Depot
+COST,Costco Wholesale Corporation
+KO,Coca-Cola Company (The)
+PEP,PepsiCo, Inc.
+UNH,UnitedHealth Group Incorporated
+
+META,Meta Platforms, Inc.
+AVGO,Broadcom Inc.
+LLY,Eli Lilly and Company
+MA,Mastercard Incorporated
+NFLX,Netflix, Inc.
+ORCL,Oracle Corporation
+CRM,Salesforce, Inc.
+ADBE,Adobe Inc.
+CSCO,Cisco Systems, Inc.
+INTC,Intel Corporation
+AMD,Advanced Micro Devices, Inc.
+QCOM,QUALCOMM Incorporated
+TXN,Texas Instruments Incorporated
+AMAT,Applied Materials, Inc.
+MU,Micron Technology, Inc.
+KLAC,KLA Corporation
+LRCX,Lam Research Corporation
+INTU,Intuit Inc.
+NOW,ServiceNow, Inc.
+IBM,International Business Machines Corporation
+ACN,Accenture plc
+UBER,Uber Technologies, Inc.
+ABNB,Airbnb, Inc.
+PYPL,PayPal Holdings, Inc.
+EA,Electronic Arts Inc.
+TTWO,Take-Two Interactive Software, Inc.
+
+T,AT&T Inc.
+VZ,Verizon Communications Inc.
+TMUS,T-Mobile US, Inc.
+CMCSA,Comcast Corporation
+
+BAC,Bank of America Corporation
+WFC,Wells Fargo & Company
+C,Citigroup Inc.
+GS,The Goldman Sachs Group, Inc.
+MS,Morgan Stanley
+BLK,BlackRock, Inc.
+SCHW,The Charles Schwab Corporation
+AXP,American Express Company
+SPGI,S&P Global Inc.
+ICE,Intercontinental Exchange, Inc.
+CME,CME Group Inc.
+MCO,Moody's Corporation
+CB,Chubb Limited
+MMC,Marsh & McLennan Companies, Inc.
+AON,Aon plc
+TRV,The Travelers Companies, Inc.
+PGR,Progressive Corporation
+ALL,The Allstate Corporation
+MET,MetLife, Inc.
+PRU,Prudential Financial, Inc.
+AIG,American International Group, Inc.
+
+BMY,Bristol-Myers Squibb Company
+MRK,Merck & Co., Inc.
+PFE,Pfizer Inc.
+ABBV,AbbVie Inc.
+AMGN,Amgen Inc.
+GILD,Gilead Sciences, Inc.
+VRTX,Vertex Pharmaceuticals Incorporated
+REGN,Regeneron Pharmaceuticals, Inc.
+TMO,Thermo Fisher Scientific Inc.
+DHR,Danaher Corporation
+ISRG,Intuitive Surgical, Inc.
+SYK,Stryker Corporation
+BSX,Boston Scientific Corporation
+MDT,Medtronic plc
+CI,Cigna Group (The)
+HUM,Humana Inc.
+CVS,CVS Health Corporation
+UNP,Union Pacific Corporation
+
+NKE,NIKE, Inc.
+MCD,McDonald's Corporation
+SBUX,Starbucks Corporation
+LOW,Lowe's Companies, Inc.
+TGT,Target Corporation
+BKNG,Booking Holdings Inc.
+DIS,Walt Disney Company (The)
+CMG,Chipotle Mexican Grill, Inc.
+YUM,Yum! Brands, Inc.
+MAR,Marriott International, Inc.
+HLT,Hilton Worldwide Holdings Inc.
+RCL,Royal Caribbean Cruises Ltd.
+NCLH,Norwegian Cruise Line Holdings Ltd.
+DAL,Delta Air Lines, Inc.
+UAL,United Airlines Holdings, Inc.
+AAL,American Airlines Group Inc.
+
+CAT,Caterpillar Inc.
+DE,Deere & Company
+GE,General Electric Company
+HON,Honeywell International Inc.
+BA,Boeing Company (The)
+LMT,Lockheed Martin Corporation
+NOC,Northrop Grumman Corporation
+GD,General Dynamics Corporation
+RTX,RTX Corporation
+
+LIN,Linde plc
+APD,Air Products and Chemicals, Inc.
+ECL,Ecolab Inc.
+SHW,Sherwin-Williams Company (The)
+NEM,Newmont Corporation
+FCX,Freeport-McMoRan Inc.
+
+NEE,NextEra Energy, Inc.
+DUK,Duke Energy Corporation
+SO,The Southern Company
+D,Dominion Energy, Inc.
+AEP,American Electric Power Company, Inc.
+EXC,Exelon Corporation
+
+COP,ConocoPhillips
+SLB,Schlumberger Limited
+EOG,EOG Resources, Inc.
+MPC,Marathon Petroleum Corporation
+PSX,Phillips 66
+OXY,Occidental Petroleum Corporation
+KMI,Kinder Morgan, Inc.
+WMB,Williams Companies, Inc. (The)
+
+PLTR,Palantir Technologies Inc.
+CRWD,CrowdStrike Holdings, Inc.
+NET,Cloudflare, Inc.
+PANW,Palo Alto Networks, Inc.
+FTNT,Fortinet, Inc.
+ZS,Zscaler, Inc.
+
+KR,Kroger Company (The)
+DG,Dollar General Corporation
+DLTR,Dollar Tree, Inc.
+
+
+PM,Philip Morris International Inc.
+MO,Altria Group, Inc.
+
+MSI,Motorola Solutions, Inc.
+ADI,Analog Devices, Inc.
+MRVL,Marvell Technology, Inc.
+SNPS,Synopsys, Inc.
+CDNS,Cadence Design Systems, Inc.
+
+
+F,Ford Motor Company
+GM,General Motors Company
+
