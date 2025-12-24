@@ -1,5 +1,22 @@
 # De-hype Financial News 
 
+[![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Pydantic](https://img.shields.io/badge/Pydantic-E92063?logo=pydantic&logoColor=white)](https://docs.pydantic.dev/)
+[![pytest](https://img.shields.io/badge/pytest-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+
+[![Recharts](https://img.shields.io/badge/Recharts-22B5BF?logo=chartdotjs&logoColor=white)](https://recharts.org/)
+[![Zod](https://img.shields.io/badge/Zod-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
+[![httpx](https://img.shields.io/badge/httpx-2F6FEB?logo=python&logoColor=white)](https://www.python-httpx.org/)
+[![BeautifulSoup4](https://img.shields.io/badge/BeautifulSoup4-4B8BBE?logo=python&logoColor=white)](https://www.crummy.com/software/BeautifulSoup/)
+[![yfinance](https://img.shields.io/badge/yfinance-111111?logo=yahoo&logoColor=white)](https://github.com/ranaroussi/yfinance)
+[![Alpha Vantage](https://img.shields.io/badge/Alpha_Vantage-CC0000?logo=databricks&logoColor=white)](https://www.alphavantage.co/)
+[![pandas](https://img.shields.io/badge/pandas-150458?logo=pandas&logoColor=white)](https://pandas.pydata.org/)
+[![uvicorn](https://img.shields.io/badge/uvicorn-4051B5?logo=python&logoColor=white)](https://www.uvicorn.org/)
+
 **De-hype Financial News** is a full-stack app that turns noisy market headlines into a structured, factual brief. Paste a **news URL** (or the article **text**) to extract claims, identify companies, measure hype language, and view a **1‑month stock chart + % change** for companies that can be resolved to public tickers.
 
 This repo is designed to be both a practical tool and a clean engineering showcase: deterministic outputs where possible, defensive scraping, typed API models, and reproducible tests.
@@ -55,8 +72,8 @@ This repo is designed to be both a practical tool and a clean engineering showca
 
 ## 📁 Repository structure
 
-- `frontend/`  Next.js UI
-- `backend/`  FastAPI API
+- `frontend/` Next.js UI
+- `backend/` FastAPI API
 
 ---
 
