@@ -204,7 +204,31 @@ pytest -q
 - **Defensive extraction pipeline**: JSON-LD first, paragraph fallbacks, boilerplate filtering, and regression tests.
 - **Provider fallback** for market data to reduce third-party flakiness.
 - **Offline S&P500 mapping** for deterministic company → ticker resolution.
-- **Separation of concerns**: `services/` layer for extraction, entities, hype, claims, and market logic.
+- **Separation of concerns**: `services/` layer for extraction, entities, hype, claims, market, and sentiment logic.
+- **Comprehensive market analytics**: 52W range, RSI, moving averages, sector performance, volume analysis.
+- **Finance-specific sentiment analysis**: Custom lexicon with positive/negative word detection.
+- **Production-ready caching**: 24-hour market data cache, 7-day fundamentals cache.
+- **Full test coverage**: 14 passing tests including sentiment analysis.
+
+---
+
+## 🆕 New in v2.0
+
+### Enhanced Market Metrics
+- **52-week high/low analysis** with visual progress bar
+- **Fundamental data**: Market cap, P/E ratio, Beta
+- **Technical indicators**: RSI-14, 50-day MA, 200-day MA
+- **Volume analysis**: Unusual volume detection (>2x average)
+- **Comparative performance**: Stock vs. S&P 500 vs. Sector
+- **Volatility classification**: Low/Normal/High regimes
+
+### Sentiment Analysis
+- **Sentiment score**: -1.0 (very negative) to +1.0 (very positive)
+- **Finance-specific lexicon**: 100+ positive and negative financial terms
+- **Visual breakdown**: Positive/negative/neutral word counts
+- **Color-coded display**: Intuitive green/red/gray indicators
+
+See [`IMPROVEMENTS.md`](./IMPROVEMENTS.md) for complete feature documentation.
 
 ---
 
@@ -212,5 +236,8 @@ pytest -q
 
 - Improve company/entity precision (stopwords + lightweight NER).
 - Add persistence (store analyses + caching across restarts).
-- Add deployment presets (Docker + CI + Vercel/Render).
+- Historical sentiment tracking and correlation with price movements.
+- Competitor comparison and peer analysis.
+- ML-based sentiment (FinBERT) for improved accuracy.
+- Event detection (earnings, product launches, regulatory news).
 

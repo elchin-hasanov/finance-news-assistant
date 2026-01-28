@@ -8,9 +8,10 @@ from ..models import (
     Claim,
     ContentInfo,
     EntitiesInfo,
-    HypeInfo,
-    HypeWordCount,
     MarketInfo,
+    TickerMarketContext,
+    PolymarketInsight,
+    SentimentInfo,
     SourceInfo,
 )
 from .claims import extract_claims
@@ -22,10 +23,11 @@ from .entities import (
     infer_ticker_aliases,
 )
 from .fetching import FetchBlockedError, FetchFailedError, extract_article_text, fetch_url, newspaper_fallback
-from .hype import score_hype
 from .market import fetch_market_context, fetch_markets_context
+from .sentiment import analyze_sentiment, get_sentiment_label
 from .text_utils import normalize_whitespace
 from .summary import facts_only_summary
+from .polymarket import top_relevant_bets
 
 
 def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
@@ -53,13 +55,19 @@ def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
             raw_text = extracted_text
 
         except FetchBlockedError as e:
+            d = (domain or "").lower()
+            is_yahoo = "yahoo.com" in d or "finance.yahoo" in d
+            hint = "Paste text instead."
+            if is_yahoo:
+                hint = "Yahoo Finance blocks automated fetching (HTTP 403). Click 'Paste text' and paste the article content."
             raise HTTPException(
                 status_code=403,
                 detail={
                     "error": {
                         "code": "FETCH_BLOCKED",
                         "message": str(e),
-                        "hint": "Paste text instead.",
+                        "hint": hint,
+                        "domain": domain,
                     }
                 },
             )
@@ -103,7 +111,10 @@ def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
 
     # Fallback to raw tickers only if we couldn't resolve any company->ticker.
     tickers = resolved_tickers if resolved_tickers else raw_tickers
-    primary_ticker = choose_primary_ticker(tickers)
+    
+    # Pass headline to primary ticker selection for better accuracy
+    headline = title or ""
+    primary_ticker = choose_primary_ticker(tickers, text=extracted_text, headline=headline)
 
     market_res = fetch_market_context(primary_ticker)
     markets_res = fetch_markets_context(tickers)
@@ -111,7 +122,9 @@ def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
     claims_raw = extract_claims(extracted_text, limit=10)
     claims = [Claim(**c) for c in claims_raw]
 
-    hype_score, hype_words, ratio = score_hype(extracted_text)
+    # Sentiment analysis
+    sentiment_result = analyze_sentiment(extracted_text)
+    sentiment_label = get_sentiment_label(sentiment_result["sentiment_score"])
 
     facts_summary = facts_only_summary(
         extracted_text,
@@ -119,6 +132,14 @@ def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
         day_move_pct=market_res.day_move_pct,
         claims=claims_raw,
     )
+
+    polymarket = top_relevant_bets(
+        text=extracted_text,
+        tickers=tickers,
+        companies=companies,
+        limit=3,
+    )
+    polymarket_models = [PolymarketInsight(**b.__dict__) for b in polymarket]
 
     return AnalyzeResponse(
         source=SourceInfo(
@@ -134,29 +155,80 @@ def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
             ticker_aliases={k: v for k, v in ticker_aliases.items()},
             company_tickers={k: v for k, v in company_tickers.items()},
             primary_ticker=primary_ticker,
+            primary_sector=market_res.sector,
+            primary_industry=market_res.industry,
         ),
         market=MarketInfo(
             primary_ticker=primary_ticker,
             price_series=market_res.price_series,
+            data_source=getattr(market_res, "data_source", None),
+            last_close_date=getattr(market_res, "last_close_date", None),
+            price_series_days=getattr(market_res, "price_series_days", None),
+            current_price=getattr(market_res, "current_price", None),
             day_move_pct=market_res.day_move_pct,
             vol_20d=market_res.vol_20d,
             move_zscore=market_res.move_zscore,
+            week_52_high=market_res.week_52_high,
+            week_52_low=market_res.week_52_low,
+            pct_from_52w_high=market_res.pct_from_52w_high,
+            pct_from_52w_low=market_res.pct_from_52w_low,
+            market_cap=market_res.market_cap,
+            sector=market_res.sector,
+            industry=market_res.industry,
+            beta=market_res.beta,
+            pe_ratio=market_res.pe_ratio,
+            sector_performance_today=market_res.sector_performance_today,
+            sp500_performance_today=market_res.sp500_performance_today,
+            relative_strength=market_res.relative_strength,
+            industry_benchmark=getattr(market_res, "industry_benchmark", None),
+            industry_performance_today=getattr(market_res, "industry_performance_today", None),
+            relative_strength_vs_industry=getattr(market_res, "relative_strength_vs_industry", None),
+            peer_group_label=getattr(market_res, "peer_group_label", None),
+            peer_group_size=getattr(market_res, "peer_group_size", None),
+            peer_avg_move_today=getattr(market_res, "peer_avg_move_today", None),
+            relative_strength_vs_peers=getattr(market_res, "relative_strength_vs_peers", None),
+            rsi_14d=market_res.rsi_14d,
+            ma_50d=market_res.ma_50d,
+            ma_200d=market_res.ma_200d,
+            unusual_volume=market_res.unusual_volume,
+            near_52w_high=market_res.near_52w_high,
+            volatility_regime=market_res.volatility_regime,
+            average_volume_20d=market_res.average_volume_20d,
+            current_volume=market_res.current_volume,
         ),
         markets=[
-            {
-                "ticker": m.ticker,
-                "price_series": m.price_series,
-                "day_move_pct": m.day_move_pct,
-                "vol_20d": m.vol_20d,
-                "move_zscore": m.move_zscore,
-            }
+            TickerMarketContext(
+                ticker=m.ticker,
+                price_series=m.price_series,
+                day_move_pct=m.day_move_pct,
+                vol_20d=m.vol_20d,
+                move_zscore=m.move_zscore,
+                data_source=getattr(m, "data_source", None),
+                last_close_date=getattr(m, "last_close_date", None),
+                price_series_days=getattr(m, "price_series_days", None),
+                week_52_high=m.week_52_high,
+                week_52_low=m.week_52_low,
+                pct_from_52w_high=m.pct_from_52w_high,
+                market_cap=m.market_cap,
+                sector=m.sector,
+                industry=m.industry,
+                rsi_14d=m.rsi_14d,
+                ma_50d=m.ma_50d,
+                ma_200d=m.ma_200d,
+                sector_performance_today=getattr(m, "sector_performance_today", None),
+                sp500_performance_today=getattr(m, "sp500_performance_today", None),
+                relative_strength=getattr(m, "relative_strength", None),
+            )
             for m in markets_res
         ],
         claims=claims,
-        hype=HypeInfo(
-            score_0_100=hype_score,
-            ratio=ratio,
-            hype_words=[HypeWordCount(word=w, count=c) for w, c in hype_words],
+        sentiment=SentimentInfo(
+            sentiment_score=sentiment_result["sentiment_score"],
+            sentiment_label=sentiment_label,
+            positive_count=sentiment_result["positive_count"],
+            negative_count=sentiment_result["negative_count"],
+            neutral_ratio=sentiment_result["neutral_ratio"],
         ),
+    polymarket=polymarket_models,
         facts_only_summary=facts_summary,
     )

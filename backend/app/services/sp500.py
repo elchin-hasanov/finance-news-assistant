@@ -11,6 +11,8 @@ from pathlib import Path
 class Sp500Company:
     ticker: str
     security: str
+    sector: str | None = None
+    industry: str | None = None
 
 
 _DATA_PATH = Path(__file__).resolve().parent / "data" / "sp500.csv"
@@ -18,7 +20,7 @@ _DATA_PATH = Path(__file__).resolve().parent / "data" / "sp500.csv"
 
 def _normalize(s: str) -> str:
     s = s.strip().lower()
-    # Drop punctuation and collapse whitespace for robust matching.
+    # Treat punctuation as whitespace and collapse duplicates for robust matching.
     s = re.sub(r"[^a-z0-9\s]", " ", s)
     s = re.sub(r"\s+", " ", s)
     return s
@@ -26,7 +28,6 @@ def _normalize(s: str) -> str:
 
 _CORP_SUFFIXES = (
     " inc",
-    " inc ",
     " incorporated",
     " corp",
     " corporation",
@@ -42,7 +43,7 @@ _CORP_SUFFIXES = (
 
 
 def _strip_corp_suffixes(normalized: str) -> str:
-    s = normalized
+    s = normalized.strip()
     # Repeatedly strip, because some names have multiple suffix-like words.
     changed = True
     while changed:
@@ -54,7 +55,146 @@ def _strip_corp_suffixes(normalized: str) -> str:
     return s
 
 
-def _name_variants(security_name: str) -> set[str]:
+# Common short-name aliases for S&P 500 companies that don't follow standard patterns.
+# Maps ticker -> list of common short names used in news/articles.
+_SHORT_NAME_ALIASES: dict[str, list[str]] = {
+    "BA": ["boeing"],
+    "JPM": ["jpmorgan", "jp morgan", "chase"],
+    "META": ["meta", "facebook"],
+    "DIS": ["disney"],
+    "KO": ["coca cola", "coke"],
+    "GS": ["goldman", "goldman sachs"],
+    "MS": ["morgan stanley"],
+    "WFC": ["wells fargo"],
+    "BAC": ["bank of america", "bofa"],
+    "CVS": ["cvs"],
+    "HD": ["home depot"],
+    "UNH": ["unitedhealth"],
+    "CI": ["cigna"],
+    "CAT": ["caterpillar"],
+    "HON": ["honeywell"],
+    "GE": ["ge", "general electric"],
+    "LMT": ["lockheed", "lockheed martin"],
+    "RTX": ["raytheon"],
+    "NOC": ["northrop", "northrop grumman"],
+    "GD": ["general dynamics"],
+    "DE": ["john deere", "deere"],
+    "UNP": ["union pacific"],
+    "NEE": ["nextera"],
+    "BKNG": ["booking", "priceline"],
+    "ABNB": ["airbnb"],
+    "UBER": ["uber"],
+    "NFLX": ["netflix"],
+    "PLTR": ["palantir"],
+    "CRWD": ["crowdstrike"],
+    "PANW": ["palo alto"],
+    "CRM": ["salesforce"],
+    "ORCL": ["oracle"],
+    "ADBE": ["adobe"],
+    "INTC": ["intel"],
+    "AVGO": ["broadcom"],
+    "QCOM": ["qualcomm"],
+    "TXN": ["texas instruments"],
+    "IBM": ["ibm"],
+    "ACN": ["accenture"],
+    "INTU": ["intuit", "turbotax"],
+    "NOW": ["servicenow"],
+    "SBUX": ["starbucks"],
+    "MCD": ["mcdonalds", "mcdonald"],
+    "NKE": ["nike"],
+    "TGT": ["target"],
+    "LOW": ["lowes", "lowe's"],
+    "CMG": ["chipotle"],
+    "YUM": ["yum brands", "pizza hut", "taco bell", "kfc"],
+    "MAR": ["marriott"],
+    "HLT": ["hilton"],
+    "DAL": ["delta", "delta airlines"],
+    "UAL": ["united airlines"],
+    "AAL": ["american airlines"],
+    "RCL": ["royal caribbean"],
+    "LIN": ["linde"],
+    "SHW": ["sherwin williams"],
+    "NEM": ["newmont"],
+    "FCX": ["freeport"],
+    "COP": ["conocophillips"],
+    "SLB": ["schlumberger"],
+    "OXY": ["occidental"],
+    "KMI": ["kinder morgan"],
+    "WMB": ["williams companies"],
+    "DUK": ["duke energy"],
+    "SO": ["southern company"],
+    "D": ["dominion"],
+    "AEP": ["aep", "american electric"],
+    "EXC": ["exelon"],
+    "XOM": ["exxon", "exxonmobil"],
+    "CVX": ["chevron"],
+    "MPC": ["marathon petroleum"],
+    "PSX": ["phillips 66"],
+    "EOG": ["eog"],
+    "PFE": ["pfizer"],
+    "MRK": ["merck"],
+    "ABBV": ["abbvie"],
+    "JNJ": ["johnson johnson", "j j", "jnj"],
+    "LLY": ["eli lilly", "lilly"],
+    "BMY": ["bristol myers"],
+    "AMGN": ["amgen"],
+    "GILD": ["gilead"],
+    "VRTX": ["vertex"],
+    "REGN": ["regeneron"],
+    "TMO": ["thermo fisher"],
+    "DHR": ["danaher"],
+    "ISRG": ["intuitive surgical"],
+    "SYK": ["stryker"],
+    "BSX": ["boston scientific"],
+    "MDT": ["medtronic"],
+    "PM": ["philip morris"],
+    "MO": ["altria"],
+    "PG": ["procter gamble", "p g"],
+    "KR": ["kroger"],
+    "COST": ["costco"],
+    "WMT": ["walmart"],
+    "DG": ["dollar general"],
+    "DLTR": ["dollar tree"],
+    "T": ["at t", "att"],
+    "VZ": ["verizon"],
+    "TMUS": ["t mobile", "tmobile"],
+    "CMCSA": ["comcast"],
+    "SCHW": ["charles schwab", "schwab"],
+    "BLK": ["blackrock"],
+    "AXP": ["american express", "amex"],
+    "SPGI": ["s p global"],
+    "ICE": ["intercontinental exchange"],
+    "CME": ["cme"],
+    "MCO": ["moodys", "moody"],
+    "CB": ["chubb"],
+    "MMC": ["marsh mclennan"],
+    "AON": ["aon"],
+    "TRV": ["travelers"],
+    "PGR": ["progressive"],
+    "ALL": ["allstate"],
+    "MET": ["metlife"],
+    "PRU": ["prudential"],
+    "AIG": ["aig"],
+    "F": ["ford"],
+    "GM": ["gm", "general motors"],
+    "SNPS": ["synopsys"],
+    "CDNS": ["cadence"],
+    "MSI": ["motorola"],
+    "ADI": ["analog devices"],
+    "MRVL": ["marvell"],
+    "KLAC": ["kla"],
+    "LRCX": ["lam research"],
+    "AMAT": ["applied materials"],
+    "MU": ["micron"],
+    "EA": ["electronic arts", "ea sports"],
+    "TTWO": ["take two", "rockstar games"],
+    "PYPL": ["paypal"],
+    "V": ["visa"],
+    "MA": ["mastercard"],
+}
+
+
+def _name_variants(security_name: str, ticker: str | None = None) -> set[str]:
     """Generate normalized lookup variants for a security name.
 
     Goal: map user mentions like "Amazon" or "Amazon.com" to "Amazon.com, Inc.".
@@ -98,6 +238,11 @@ def _name_variants(security_name: str) -> set[str]:
         if v2:
             variants.add(v2)
 
+    # Add ticker-based short aliases from _SHORT_NAME_ALIASES
+    if ticker:
+        for alias in _SHORT_NAME_ALIASES.get(ticker.upper(), []):
+            variants.add(_normalize(alias))
+
     # Final cleanup.
     variants = {re.sub(r"\s+", " ", v).strip() for v in variants if v.strip()}
     return variants
@@ -119,7 +264,12 @@ def load_sp500() -> list[Sp500Company]:
         for row in reader:
             ticker = _normalize_ticker(row["ticker"])
             security = row["security"].strip()
-            out.append(Sp500Company(ticker=ticker, security=security))
+
+            # Backward compatible: sector/industry columns may not exist in the CSV.
+            sector = (row.get("sector") or "").strip() or None
+            industry = (row.get("industry") or "").strip() or None
+
+            out.append(Sp500Company(ticker=ticker, security=security, sector=sector, industry=industry))
     return out
 
 
@@ -139,4 +289,71 @@ def resolve_sp500_ticker(company_or_alias: str) -> str | None:
     key = _normalize(company_or_alias)
     if not key:
         return None
-    return sp500_name_index().get(key)
+    # Try direct hit.
+    direct = sp500_name_index().get(key)
+    if direct:
+        return direct
+
+    # Strip corporate suffixes and retry.
+    stripped = _strip_corp_suffixes(key)
+    if stripped and stripped != key:
+        t = sp500_name_index().get(stripped)
+        if t:
+            return t
+    return None
+
+
+@lru_cache(maxsize=1)
+def sp500_alias_index() -> dict[str, str]:
+    """Common offline aliases -> tickers.
+
+    This is intentionally tiny and only covers high-frequency names where our
+    minimal CSV might not include the variant users mention.
+    """
+    aliases: dict[str, str] = {
+        "nvidia": "NVDA",
+    "nvidia corp": "NVDA",
+        "tesla": "TSLA",
+        "apple": "AAPL",
+        "microsoft": "MSFT",
+        "amazon": "AMZN",
+        "alphabet": "GOOGL",
+        "google": "GOOGL",
+        "meta": "META",
+    }
+    return { _normalize(k).strip(): _normalize_ticker(v) for k, v in aliases.items() }
+
+
+def resolve_company_ticker_offline(company_or_alias: str) -> str | None:
+    """Resolve a company mention to a ticker using local data + a small alias map."""
+    t = resolve_sp500_ticker(company_or_alias)
+    if t:
+        return t
+    key = _normalize(company_or_alias).strip()
+    if not key:
+        return None
+    a = sp500_alias_index().get(key)
+    if a:
+        return a
+
+    stripped = _strip_corp_suffixes(key).strip()
+    if stripped and stripped != key:
+        return sp500_alias_index().get(stripped)
+    return None
+
+
+@lru_cache(maxsize=1)
+def sp500_ticker_index() -> dict[str, Sp500Company]:
+    """Map normalized ticker -> company record."""
+    return {c.ticker: c for c in load_sp500()}
+
+
+def lookup_sp500_profile(ticker: str) -> tuple[str | None, str | None]:
+    """Return (sector, industry) for an S&P 500 ticker using local data."""
+    if not ticker:
+        return (None, None)
+    t = _normalize_ticker(ticker)
+    c = sp500_ticker_index().get(t)
+    if not c:
+        return (None, None)
+    return (c.sector, c.industry)

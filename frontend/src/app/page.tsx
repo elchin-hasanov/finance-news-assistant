@@ -5,6 +5,7 @@ import { analyze, type ApiError } from "@/lib/api";
 import { analyzeInputSchema, type AnalyzeResponse } from "@/lib/schemas";
 import { StockChart } from "@/components/StockChart";
 import { Badge } from "@/components/Badge";
+import { MarketMetrics } from "@/components/MarketMetrics";
 
 type Tab = "link" | "text";
 
@@ -99,7 +100,7 @@ export default function Home() {
         <header className="mb-8">
           <h1 className="text-3xl font-extrabold tracking-tight">De-hype financial news</h1>
           <p className="mt-2 text-gray-800">
-            Paste a link or the raw text. We’ll extract factual claims, tickers, market context, and a facts-only rewrite.
+            Paste a link or the raw text. Well extract tickers, market context, sentiment, and a facts-only rewrite.
           </p>
         </header>
 
@@ -203,103 +204,144 @@ export default function Home() {
             </section>
 
             <section className="rounded-xl border bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-extrabold text-slate-900">Sentiment Analysis</h2>
+              <div className="mt-3 grid gap-4 md:grid-cols-[1fr_240px]">
+                <div>
+                  <div className="text-sm font-medium text-gray-700">Overall Sentiment</div>
+                  <div className={`mt-1 text-3xl font-extrabold ${data.sentiment.sentiment_score >= 0.25 ? "text-emerald-700" : data.sentiment.sentiment_score <= -0.25 ? "text-red-700" : "text-slate-800"}`}
+                  >
+                    {data.sentiment.sentiment_label}
+                  </div>
+                  <div className="mt-2 text-sm text-gray-700">
+                    Sentiment Score: <span className="font-semibold tabular-nums">{data.sentiment.sentiment_score.toFixed(3)}</span>
+                  </div>
+                  <div className="mt-3 h-3 w-full rounded-full bg-gray-200">
+                    <div
+                      className="h-3 rounded-full bg-emerald-600"
+                      style={{ width: `${Math.round(((data.sentiment.sentiment_score + 1) / 2) * 100)}%` }}
+                      aria-label="Sentiment bar"
+                    />
+                  </div>
+                  <div className="mt-2 text-xs text-gray-600">
+                    Note: word counts below are auxiliary (lexicon) stats. The score is primarily model-based when available.
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  <div className="rounded-lg border bg-emerald-50 p-3">
+                    <div className="text-xs font-semibold text-emerald-800">Positive words (aux)</div>
+                    <div className="mt-1 text-2xl font-extrabold text-emerald-900 tabular-nums">{data.sentiment.positive_count}</div>
+                  </div>
+                  <div className="rounded-lg border bg-red-50 p-3">
+                    <div className="text-xs font-semibold text-red-800">Negative words (aux)</div>
+                    <div className="mt-1 text-2xl font-extrabold text-red-900 tabular-nums">{data.sentiment.negative_count}</div>
+                  </div>
+                  <div className="rounded-lg border bg-slate-50 p-3">
+                    <div className="text-xs font-semibold text-slate-800">Model neutral probability</div>
+                    <div className="mt-1 text-2xl font-extrabold text-slate-900 tabular-nums">
+                      {Math.round(data.sentiment.neutral_ratio * 100)}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-xl border bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-extrabold text-slate-900">Market context</h2>
-                {!companyCards.length ? <Badge>No market data</Badge> : null}
+                {!data.market.primary_ticker ? <Badge>No market data</Badge> : null}
               </div>
 
-              {companyCards.length ? (
+              {data.market.primary_ticker ? (
                 <div className="mt-4">
-                  <div className="flex flex-wrap gap-2">
-                    {companyCards.map((c) => (
-                      <button
-                        key={c.company}
-                        type="button"
-                        onClick={() => setSelectedCompany(c.company)}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${selected?.company === c.company ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-800 border-gray-200"}`}
-                      >
-                        {c.company}
-                      </button>
-                    ))}
-                  </div>
-
-                  {selected ? (
-                    <div className="mx-auto mt-6 max-w-4xl rounded-xl border bg-white p-6 shadow-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="text-lg font-extrabold text-slate-900">{selected.company}</div>
-                          <div className="mt-1 text-sm text-gray-600">Previous month</div>
+                  {/* Prefer showing the metrics even when we don't have a chart series */}
+                  <div className="mx-auto mt-6 max-w-4xl rounded-xl border bg-white p-6 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-extrabold text-slate-900">
+                          {selected?.company ?? data.market.primary_ticker}
                         </div>
-                        <div className={`text-3xl font-extrabold tabular-nums ${selected.pct30 == null ? "text-gray-700" : selected.pct30 >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                          {selected.pct30 == null ? "—" : `${selected.pct30.toFixed(2)}%`}
+                        <div className="mt-1 text-sm text-gray-600">
+                          Ticker: <span className="font-semibold">{data.market.primary_ticker}</span>
                         </div>
                       </div>
-
-                      <div className="mt-4">
-                        <StockChart data={selected.series} />
-                      </div>
-
-                      {selected.series.length === 0 ? (
-                        <p className="mt-3 text-sm text-gray-700">No price series available right now for this company.</p>
-                      ) : null}
                     </div>
-                  ) : null}
+
+                    {companyCards.length ? (
+                      <div className="mt-4">
+                        <div className="text-sm font-semibold text-gray-900 mb-3">Price Chart (30 days)</div>
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {companyCards.map((c) => (
+                            <button
+                              key={c.company}
+                              type="button"
+                              onClick={() => setSelectedCompany(c.company)}
+                              className={`rounded-full border px-3 py-1 text-xs font-semibold ${selected?.company === c.company ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-800 border-gray-200"}`}
+                            >
+                              {c.company}
+                            </button>
+                          ))}
+                        </div>
+                        {selected ? <StockChart data={selected.series} /> : null}
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-sm text-gray-700">No price chart available, but market metrics may still be available below.</p>
+                    )}
+
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-4">Market Metrics</h3>
+                      <MarketMetrics market={data.market} />
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
               <p className="mt-3 text-xs text-gray-600">
-                We resolve company names to tickers on the backend in order to fetch price series, but tickers aren’t shown as primary UI.
+                Market context is shown only for public securities where we can reliably resolve a real ticker.
               </p>
             </section>
 
-            <section className="rounded-xl border bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-extrabold text-slate-900">Factual claims</h2>
-              {data.claims.length ? (
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-gray-900">
-                  {data.claims.map((c, idx) => (
-                    <li key={idx}>
-                      <div className="font-medium">{c.evidence_sentence}</div>
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        {c.numbers.map((n, j) => (
-                          <Badge key={j}>
-                            {n.value}
-                            {n.unit ? ` ${n.unit}` : ""}
-                          </Badge>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-3 text-sm text-gray-700">No numeric/factual claims detected.</p>
-              )}
-            </section>
 
-            <section className="rounded-xl border bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-extrabold text-slate-900">Hype score</h2>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <div className="text-3xl font-semibold">{data.hype.score_0_100}</div>
-                <div className="text-sm text-gray-600">
-                  Ratio: {(data.hype.ratio * 100).toFixed(2)}% (hype words / total words)
-                </div>
-              </div>
-              <div className="mt-3">
-                <div className="text-sm font-medium text-gray-800">Top hype words</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {data.hype.hype_words.length ? data.hype.hype_words.map((w) => <Badge key={w.word}>{w.word}: {w.count}</Badge>) : <span className="text-sm text-gray-500">None found.</span>}
-                </div>
-              </div>
-            </section>
 
             <section className="rounded-xl border bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold">Facts-only rewrite</h2>
               <p className="mt-3 text-sm leading-6 text-gray-900">{data.facts_only_summary}</p>
             </section>
+
+            <section className="rounded-xl border bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-extrabold text-slate-900">Polymarket insights</h2>
+              <p className="mt-2 text-sm text-gray-700">
+                Top 3 prediction markets that match the articles topic (curated/offline matching).
+              </p>
+
+              {data.polymarket?.length ? (
+                <div className="mt-4 grid gap-3">
+                  {data.polymarket.slice(0, 3).map((m) => (
+                    <div key={m.title} className="rounded-lg border bg-gray-50 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-gray-900">{m.title}</div>
+                        {m.category ? <Badge>{m.category}</Badge> : null}
+                      </div>
+                      {m.reason ? <div className="mt-2 text-xs text-gray-600">{m.reason}</div> : null}
+                      {m.url ? (
+                        <div className="mt-2 text-xs">
+                          <a className="text-blue-700 underline" href={m.url} target="_blank" rel="noreferrer">
+                            View on Polymarket
+                          </a>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-gray-500">No matching prediction markets found.</div>
+              )}
+            </section>
             </div>
           ) : (
             <div className="rounded-xl border bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold">Results</h2>
-              <p className="mt-2 text-sm text-gray-700">Run an analysis to see extracted entities, market context, claims, hype score, and a rewrite.</p>
+              <p className="mt-2 text-sm text-gray-700">Run an analysis to see extracted entities, market context, sentiment, and a rewrite.</p>
             </div>
           )}
         </div>

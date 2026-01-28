@@ -1,0 +1,245 @@
+/* Finance News Analyzer - Content Script Styles */
+
+/* Highlighted text in articles */
+.fna-highlight {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(245, 158, 11, 0.15) 100%);
+  border-bottom: 2px solid #F59E0B;
+  padding: 2px 4px;
+  margin: 0 -2px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.fna-highlight:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.4) 0%, rgba(245, 158, 11, 0.25) 100%);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+/* Flash animation when scrolling to claim */
+.fna-highlight.fna-flash {
+  animation: fna-flash-animation 0.5s ease-in-out 2;
+}
+
+@keyframes fna-flash-animation {
+  0%, 100% {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(245, 158, 11, 0.15) 100%);
+  }
+  50% {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.6) 0%, rgba(245, 158, 11, 0.4) 100%);
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+  }
+}
+
+/* Chart tooltip */
+#fna-chart-tooltip {
+  position: fixed;
+  z-index: 2147483647;
+  background: #0F172A;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(5px);
+  transition: all 0.15s ease;
+  pointer-events: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-width: 300px;
+}
+
+#fna-chart-tooltip.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.fna-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #1E293B;
+}
+
+.fna-tooltip-subheader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 8px 0 10px;
+}
+
+.fna-tooltip-price {
+  font-size: 22px;
+  font-weight: 800;
+  color: #F8FAFC;
+  letter-spacing: -0.02em;
+}
+
+.fna-range {
+  display: flex;
+  gap: 6px;
+  background: #0B1220;
+  border: 1px solid #1E293B;
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.fna-range-btn {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94A3B8;
+  background: transparent;
+  border: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.fna-range-btn.active {
+  color: #E2E8F0;
+  background: #1E293B;
+}
+
+.fna-tooltip-ticker {
+  font-size: 16px;
+  font-weight: 700;
+  color: #F1F5F9;
+  background: #334155;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.fna-tooltip-change {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.fna-tooltip-change.positive {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+}
+
+.fna-tooltip-change.negative {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+}
+
+.fna-tooltip-chart {
+  display: block;
+  width: 280px;
+  height: 120px;
+  background: #1E293B;
+  border-radius: 8px;
+}
+
+/* Chart container with interactive elements */
+.fna-chart-container {
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.fna-yaxis {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: calc(100% - 16px);
+  pointer-events: none;
+}
+
+.fna-yaxis-max,
+.fna-yaxis-mid,
+.fna-yaxis-min {
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.fna-chart-crosshair {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  display: none;
+}
+
+.fna-chart-container:hover .fna-chart-crosshair {
+  display: block;
+}
+
+.fna-chart-hover-info {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(51, 65, 85, 0.95);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #F1F5F9;
+  white-space: nowrap;
+  pointer-events: none;
+  display: none;
+  gap: 2px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fna-chart-hover-info .fna-hover-price {
+  font-weight: 600;
+  color: #fff;
+}
+
+.fna-chart-container:hover .fna-chart-hover-info {
+  display: block;
+}
+
+.fna-tooltip-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #1E293B;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fna-tooltip-dates {
+  display: flex;
+  justify-content: space-between;
+  flex: 1;
+  margin-right: 12px;
+}
+
+.fna-tooltip-start-date,
+.fna-tooltip-end-date {
+  font-size: 11px;
+  color: #94A3B8;
+}
+
+.fna-tooltip-period {
+  font-size: 11px;
+  color: #64748B;
+}
+
+/* Dark mode adjustments - ensure visibility on dark sites */
+@media (prefers-color-scheme: dark) {
+  .fna-highlight {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(245, 158, 11, 0.2) 100%);
+  }
+}
+
+/* Ensure tooltip stays above everything */
+#fna-chart-tooltip * {
+  font-family: inherit !important;
+  box-sizing: border-box !important;
+}

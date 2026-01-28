@@ -1,29 +1,19 @@
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .venv/
-
-# Node / Next.js
-node_modules/
-.next/
-out/
-dist/
-
-# Logs
-*.log
-
-# OS / editor
-.DS_Store
-.vscode/
-
-# Env files
 .env
-.env.*
+backend/.env
 
-# Misc
-*.sqlite
+# pytest
+.pytest_cache/
+
+# OS
+.DS_Store
+
+# Node/extension tooling (if any)
+node_modules/
+
+# Build artifacts
+dist/
+build/

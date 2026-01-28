@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=450">
+  <title>Finance News Analyzer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 17L9 11L13 15L21 7" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M17 7H21V11" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Finance News Analyzer</span>
+      </div>
+    </header>
+
+    <main class="popup-content">
+      <!-- Initial State -->
+      <div id="initial-state" class="state-panel">
+        <div class="state-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M14 2V8H20" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 13H8" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 17H8" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M10 9H8" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h2>Analyze This Article</h2>
+        <p>Click below to scan the current page for financial news, detect stock tickers, and highlight sensational claims.</p>
+        <button id="analyze-btn" class="primary-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+            <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Analyze Article
+        </button>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loading-state" class="state-panel hidden">
+        <div class="spinner"></div>
+        <h2>Analyzing Article...</h2>
+        <p>Detecting tickers and scanning for sensational claims.</p>
+      </div>
+
+      <!-- Results State -->
+      <div id="results-state" class="state-panel hidden">
+        <!-- Primary Ticker -->
+        <div id="ticker-section" class="result-section">
+          <div class="section-header">
+            <h3>Primary Ticker</h3>
+          </div>
+          <div id="ticker-card" class="ticker-card">
+            <div class="ticker-info">
+              <span id="ticker-symbol" class="ticker-symbol">—</span>
+              <span id="ticker-name" class="ticker-name">No ticker detected</span>
+            </div>
+            <div id="ticker-change" class="ticker-change neutral">
+              <span id="change-value">—</span>
+            </div>
+          </div>
+
+            <div class="primary-range" role="group" aria-label="Price range">
+              <button class="rangeBtn" data-range="5D"><span class="range-label">5D</span><span class="range-pct" id="pct-5D"></span></button>
+              <button class="rangeBtn active" data-range="1M"><span class="range-label">1M</span><span class="range-pct" id="pct-1M"></span></button>
+              <button class="rangeBtn" data-range="6M"><span class="range-label">6M</span><span class="range-pct" id="pct-6M"></span></button>
+            </div>
+
+            <div id="mini-chart" class="mini-chart">
+              <canvas id="primaryChart" width="380" height="180"></canvas>
+              <div id="primaryHover" class="primaryHover" aria-hidden="true"></div>
+            </div>
+        </div>
+
+        <!-- Sensational Claims -->
+        <div id="claims-section" class="result-section">
+          <div class="section-header">
+            <h3>Sensational Claims</h3>
+            <span id="claims-count" class="badge">0</span>
+          </div>
+          <div id="claims-list" class="claims-list">
+            <p class="empty-state">No sensational claims found.</p>
+          </div>
+        </div>
+
+        <!-- Highlighted Sentences Info -->
+        <div class="highlight-info">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" stroke="#F59E0B" stroke-width="2"/>
+            <path d="M12 16V12" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="12" cy="8" r="1" fill="#F59E0B"/>
+          </svg>
+          <span>Hover over <mark>highlighted text</mark> in the article to see stock charts.</span>
+        </div>
+
+        <button id="clear-btn" class="secondary-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Clear Highlights
+        </button>
+      </div>
+
+      <!-- Error State -->
+      <div id="error-state" class="state-panel hidden">
+        <div class="state-icon error">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" stroke="#EF4444" stroke-width="2"/>
+            <path d="M12 8V12" stroke="#EF4444" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="12" cy="16" r="1" fill="#EF4444"/>
+          </svg>
+        </div>
+        <h2>Analysis Failed</h2>
+        <p id="error-message">Could not analyze the article. Please try again.</p>
+        <button id="retry-btn" class="primary-btn">Try Again</button>
+      </div>
+    </main>
+
+    <footer class="popup-footer">
+      <div class="settings-row">
+        <label for="api-url">Backend URL:</label>
+        <input type="text" id="api-url" placeholder="http://localhost:8000" />
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

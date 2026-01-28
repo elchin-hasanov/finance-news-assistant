@@ -20,6 +20,18 @@ def get_settings() -> Settings:
 
     cors = os.getenv("CORS_ORIGINS", "http://localhost:3000")
     cors_origins = [o.strip() for o in cors.split(",") if o.strip()]
+    
+    # Always allow Chrome extension origins (they use chrome-extension:// scheme)
+    # Also allow localhost variants for development
+    default_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+    for origin in default_origins:
+        if origin not in cors_origins:
+            cors_origins.append(origin)
 
     timeout = float(os.getenv("HTTP_TIMEOUT_SECONDS", "12"))
     user_agent = os.getenv(

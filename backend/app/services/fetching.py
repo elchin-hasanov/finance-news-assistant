@@ -20,6 +20,11 @@ _BOILERPLATE_RE = re.compile(
 )
 
 
+_JUNK_LINE_RE = re.compile(
+    r"(?im)^(?:\s*(?:watch\s+live|markets|investing|tech|media|politics|video|live|watch|search|skip\s+navigation|read\s+more|more\s+from|related|trending|copyright|all\s+rights\s+reserved)\s*)$"
+)
+
+
 def _extract_json_ld_article_text(soup: BeautifulSoup) -> str | None:
     """Try to extract article body from JSON-LD blocks.
 
@@ -82,6 +87,8 @@ def _paragraph_text_from(container) -> str:
         if len(t) < 40:
             continue
         if _BOILERPLATE_RE.search(t):
+            continue
+        if _JUNK_LINE_RE.search(t):
             continue
         parts.append(t)
     return normalize_whitespace("\n\n".join(parts))

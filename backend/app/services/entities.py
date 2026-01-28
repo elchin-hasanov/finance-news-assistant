@@ -264,7 +264,199 @@ def infer_company_tickers(companies: list[str], ticker_aliases: dict[str, str]) 
     return out
 
 
-def choose_primary_ticker(tickers: list[str]) -> str | None:
+def choose_primary_ticker(tickers: list[str], text: str = "", headline: str = "") -> str | None:
+    """Choose the single best ticker for "primary" market context.
+
+    Heuristics:
+    1. Count how many times each ticker/company is mentioned in the text
+    2. Give EXTRA weight (5x) to companies mentioned in the headline
+    3. Prefer the most-mentioned ticker (weighted by mention count)
+    4. For ties, prefer well-known tickers over obscure ones
+    5. For macro articles (no clear company), prefer index ETFs
+
+    This intentionally stays offline (no network calls / no LLM) so it can run
+    reliably in production.
+    """
+    # Import here to avoid circular import
+    from .company_mapping import get_comprehensive_company_mapping
+
     if not tickers:
         return None
-    return tickers[0]
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for t in tickers:
+        tt = (t or "").strip().upper().replace(".", "-")
+        if not tt or tt in _STOP_TICKERS:
+            continue
+        if tt not in seen:
+            seen.add(tt)
+            normalized.append(tt)
+
+    if not normalized:
+        return None
+
+    # Count mentions for each ticker in the text.
+    # Robust scoring to avoid "vague tickers":
+    # - company name matches are strong evidence (x3)
+    # - ticker symbol matches are weak evidence (x1)
+    # - short tickers are penalized unless backed by name matches
+    # - HEADLINE mentions get 5x bonus (the headline usually contains the main subject)
+    text_upper = (text or "").upper()
+    headline_upper = (headline or "").upper()
+    headline_lower = (headline or "").lower()
+    mention_counts: dict[str, float] = {}
+    
+    # Get comprehensive company mapping for headline analysis
+    company_mapping = get_comprehensive_company_mapping()
+
+    # Mapping from ticker to common names/variants for counting
+    ticker_variants: dict[str, list[str]] = {
+        "AAPL": ["AAPL", "APPLE"],
+        "TSLA": ["TSLA", "TESLA"],
+        "NVDA": ["NVDA", "NVIDIA"],
+        "MSFT": ["MSFT", "MICROSOFT"],
+        "GOOGL": ["GOOGL", "GOOG", "GOOGLE", "ALPHABET"],
+        "AMZN": ["AMZN", "AMAZON"],
+        "META": ["META", "FACEBOOK"],
+        "NFLX": ["NFLX", "NETFLIX"],
+        "JPM": ["JPM", "JPMORGAN", "JP MORGAN", "CHASE"],
+        "BAC": ["BAC", "BANK OF AMERICA"],
+        "WFC": ["WFC", "WELLS FARGO"],
+        "GS": ["GS", "GOLDMAN", "GOLDMAN SACHS"],
+        "MS": ["MS", "MORGAN STANLEY"],
+        "V": ["VISA"],
+        "MA": ["MASTERCARD"],
+        "BA": ["BA", "BOEING"],
+        "DIS": ["DIS", "DISNEY", "WALT DISNEY"],
+        "KO": ["KO", "COCA-COLA", "COCA COLA", "COKE"],
+        "PEP": ["PEP", "PEPSI", "PEPSICO"],
+        "WMT": ["WMT", "WALMART", "WAL-MART"],
+        "COST": ["COST", "COSTCO"],
+        "HD": ["HD", "HOME DEPOT"],
+        "AMD": ["AMD", "ADVANCED MICRO"],
+        "INTC": ["INTC", "INTEL"],
+        "CRM": ["CRM", "SALESFORCE"],
+        "ORCL": ["ORCL", "ORACLE"],
+        "ADBE": ["ADBE", "ADOBE"],
+        "PYPL": ["PYPL", "PAYPAL"],
+        "SQ": ["SQ", "SQUARE", "BLOCK"],
+        "UBER": ["UBER"],
+        "LYFT": ["LYFT"],
+        "ABNB": ["ABNB", "AIRBNB"],
+        "COIN": ["COIN", "COINBASE"],
+        "HOOD": ["HOOD", "ROBINHOOD"],
+        "PLTR": ["PLTR", "PALANTIR"],
+        "CRWD": ["CRWD", "CROWDSTRIKE"],
+        "ZM": ["ZM", "ZOOM"],
+        "SHOP": ["SHOP", "SHOPIFY"],
+        "SPOT": ["SPOT", "SPOTIFY"],
+        "SNAP": ["SNAP", "SNAPCHAT"],
+        "PINS": ["PINS", "PINTEREST"],
+        "TWTR": ["TWTR", "TWITTER"],
+        "F": ["FORD"],
+        "GM": ["GM", "GENERAL MOTORS"],
+        "XOM": ["XOM", "EXXON", "EXXONMOBIL"],
+        "CVX": ["CVX", "CHEVRON"],
+        "COP": ["COP", "CONOCOPHILLIPS"],
+        "PFE": ["PFE", "PFIZER"],
+        "JNJ": ["JNJ", "JOHNSON & JOHNSON", "JOHNSON AND JOHNSON"],
+        "MRK": ["MRK", "MERCK"],
+        "ABBV": ["ABBV", "ABBVIE"],
+        "LLY": ["LLY", "ELI LILLY", "LILLY"],
+        "UNH": ["UNH", "UNITEDHEALTH"],
+        "CVS": ["CVS"],
+        "T": ["AT&T", "ATT"],
+        "VZ": ["VZ", "VERIZON"],
+        "TMUS": ["TMUS", "T-MOBILE", "TMOBILE"],
+        "CMCSA": ["CMCSA", "COMCAST"],
+        "SPY": ["SPY", "S&P 500", "S&P500", "SP500"],
+        "QQQ": ["QQQ", "NASDAQ", "NASDAQ 100"],
+        "DIA": ["DIA", "DOW JONES", "DOW"],
+        "IWM": ["IWM", "RUSSELL 2000", "RUSSELL"],
+        "BTC-USD": ["BTC", "BITCOIN"],
+        "ETH-USD": ["ETH", "ETHEREUM"],
+    }
+
+    def _count_word(needle: str, in_text: str) -> int:
+        if not needle:
+            return 0
+        pattern = rf"\b{re.escape(needle)}\b"
+        return len(re.findall(pattern, in_text, re.I))
+
+    def _ticker_base_weight(t: str) -> float:
+        if len(t) <= 1:
+            return 0.0
+        if len(t) == 2:
+            return 0.35
+        if len(t) == 3:
+            return 0.7
+        return 1.0
+
+    # Build reverse mapping: company name -> ticker (for headline analysis)
+    name_to_ticker: dict[str, str] = {}
+    for name, ticker in company_mapping.items():
+        name_to_ticker[name.lower()] = ticker.upper()
+
+    # Check headline for company mentions first (high priority)
+    headline_tickers: set[str] = set()
+    if headline_lower:
+        # Check for explicit ticker mentions in headline
+        for ticker in normalized:
+            if re.search(rf"\b{re.escape(ticker)}\b", headline_upper):
+                headline_tickers.add(ticker)
+        
+        # Check for company name mentions in headline
+        for name, ticker in name_to_ticker.items():
+            if len(name) >= 3 and name in headline_lower:
+                ticker_upper = ticker.upper()
+                if ticker_upper in normalized or ticker_upper.replace("-", ".") in normalized:
+                    headline_tickers.add(ticker_upper)
+
+    for ticker in normalized:
+        base_w = _ticker_base_weight(ticker)
+        variants = ticker_variants.get(ticker, [ticker])
+        ticker_token_count = _count_word(ticker, text_upper)
+        name_count = 0
+        for v in variants:
+            if v == ticker:
+                continue
+            name_count += _count_word(v, text_upper)
+
+        score = (3.0 * float(name_count) + 1.0 * float(ticker_token_count)) * base_w
+        if name_count == 0 and ticker_token_count <= 1:
+            score *= 0.1
+        
+        # HEADLINE BONUS: If ticker is mentioned in headline, give 5x boost
+        if ticker in headline_tickers:
+            score += 10.0  # Strong bonus for headline mention
+        
+        mention_counts[ticker] = score
+
+    total_mentions = sum(mention_counts.values())
+    max_score = max(mention_counts.values()) if mention_counts else 0
+    
+    # Minimum score threshold for a ticker to be considered "obvious"
+    MIN_OBVIOUS_SCORE = 2.0
+    
+    # If no clear winner (max score below threshold), fall back to S&P 500
+    if total_mentions == 0 or max_score < MIN_OBVIOUS_SCORE:
+        # Check if article is about the market in general
+        market_terms = ["market", "stocks", "wall street", "investors", "trading", "bull", "bear", "rally", "selloff"]
+        text_lower = text.lower()
+        is_market_article = any(term in text_lower for term in market_terms)
+        
+        if is_market_article or max_score < MIN_OBVIOUS_SCORE:
+            return "SPY"  # Default to S&P 500 index
+    
+    # Sort by score (descending), then by position in original list (for ties)
+    ticker_scores = []
+    for i, ticker in enumerate(normalized):
+        count = mention_counts.get(ticker, 0)
+        # Small bonus for appearing earlier in extraction order (tiebreaker)
+        ticker_scores.append((count, -i, ticker))
+    
+    ticker_scores.sort(reverse=True)
+    
+    # Return the most-mentioned ticker
+    return ticker_scores[0][2]

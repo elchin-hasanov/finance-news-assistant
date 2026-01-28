@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Finance News Analyzer",
+  "version": "1.0.0",
+  "description": "Analyze financial news articles - detect tickers, highlight sensational claims, and view stock charts on hover.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "css": ["content/styles.css"],
+      "js": ["content/companyMapping.js", "content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["content/chart.js", "content/styles.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
