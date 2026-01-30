@@ -18,6 +18,9 @@ CORS_ORIGINS=http://localhost:3000
 HTTP_TIMEOUT_SECONDS=12
 USER_AGENT=Mozilla/5.0 ...
 
+# Optional: transformer sentiment (FinBERT). Off by default to avoid OOM on small hosts.
+ENABLE_TRANSFORMER_SENTIMENT=0
+
 # Used as fallback market data source when yfinance is rate-limited
 ALPHAVANTAGE_API_KEY=...
 ```

@@ -21,6 +21,7 @@ from functools import lru_cache
 from typing import Any
 
 import re
+import os
 
 # Positive sentiment words in finance context
 POSITIVE_WORDS = {
@@ -107,6 +108,12 @@ def analyze_sentiment(text: str) -> dict[str, float | int]:
 @lru_cache(maxsize=1)
 def _get_sentiment_pipeline():
     """Lazily load the HF pipeline only once per process."""
+    # Render free/starter instances are memory constrained and can OOM when loading
+    # torch/transformers models. Make this opt-in via env var.
+    enable = os.getenv("ENABLE_TRANSFORMER_SENTIMENT", "0").strip().lower()
+    if enable not in {"1", "true", "yes", "on"}:
+        return None
+
     try:
         from transformers import pipeline
 
