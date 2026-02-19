@@ -1,59 +1,38 @@
+"""Sensational-claim extraction — v2.
+
+Design goals
+────────────
+1. **Precision over recall** – only surface claims that are genuinely
+   sensational, attention-grabbing, or contain unverified / exaggerated
+   assertions.
+2. **Objective multi-signal scoring** – six positive signals, three penalty
+   signals, each 0-3 pts, combined into a 0-10 normalised score.
+3. **Category tagging** – each claim gets a human-readable category so the
+   extension popup can show *why* it was flagged.
+4. **Strict year filtering** – bare years (2009, 2021, 2024) are NOT treated
+   as noteworthy numbers unless they appear with both a temporal preposition
+   AND a comparative/magnitude marker.  "In 2021, Apple tested…" ≠ sensational.
+"""
+
 from __future__ import annotations
 
 import re
 
 from .text_utils import split_sentences
 
-
-_CLAIM_HINT_RE = re.compile(
-    r"(\$\s?\d|\d\s?%|\b\d{4}\b|\b(?:million|billion|trillion)\b|\bEPS\b|\brevenue\b|\bguidance\b|\bforecast\b)",
-    re.I,
-)
-
-# Patterns that indicate a SENSATIONAL claim (shocking, alarming, or attention-grabbing)
-_SENSATIONAL_PATTERNS = [
-    # Dramatic percentages
-    r"\b(?:surge[ds]?|soar(?:s|ed|ing)?|plunge[ds]?|crash(?:es|ed|ing)?|plummet(?:s|ed|ing)?|skyrocket(?:s|ed|ing)?|tank(?:s|ed|ing)?|collapse[ds]?)\b",
-    # Big numbers with emotion
-    r"\b(?:record|historic|unprecedented|massive|huge|enormous|staggering|shocking|stunning|remarkable)\b",
-    # Danger/risk language
-    r"\b(?:warn(?:s|ed|ing)?|threat(?:en)?|risk|danger|crisis|catastroph|disaster|turmoil|chaos|panic)\b",
-    # Superlatives
-    r"\b(?:biggest|largest|worst|best|highest|lowest|most|least|first|last)\s+(?:ever|in\s+\d+\s+years?|since\s+\d{4})\b",
-    # Extreme movement
-    r"\b(?:double[ds]?|triple[ds]?|halve[ds]?|wipe[ds]?\s+out)\b",
-    # Uncertainty/speculation
-    r"\b(?:could|may|might)\s+(?:crash|collapse|surge|soar|plunge|double|triple)\b",
-    # Big percentage moves
-    r"\b(?:\d{2,})\s*%",  # 10%+ moves
-    # Financial distress
-    r"\b(?:bankrupt|insolvent|default|layoff|cut\s+\d|fire[ds]?\s+\d|eliminat)\b",
-    # Hype language
-    r"\b(?:game[-\s]?changer|revolutionary|disrupt|transform|breakthrough)\b",
-]
-
-_SENSATIONAL_RE = re.compile("|".join(_SENSATIONAL_PATTERNS), re.I)
-
-# Patterns that indicate boring/factual content (not sensational)
-_BORING_PATTERNS = [
-    r"^\s*(?:the\s+)?company\s+(?:reported|announced|said|stated)\s+(?:that\s+)?(?:its\s+)?(?:Q\d|quarterly|annual)",
-    r"^\s*(?:according\s+to|based\s+on|as\s+of|for\s+the\s+(?:quarter|year))",
-    r"^\s*(?:revenue|earnings|net\s+income|EPS)\s+(?:was|were|came\s+in\s+at)",
-    r"^\s*shares\s+(?:are\s+)?(?:trading|traded)\s+at",
-]
-
-_BORING_RE = re.compile("|".join(_BORING_PATTERNS), re.I)
+# ---------------------------------------------------------------------------
+# Number extraction
+# ---------------------------------------------------------------------------
 
 _NUMBER_RE = re.compile(
-    r"(?P<prefix>\$)?(?P<num>\d+(?:,\d{3})*(?:\.\d+)?)\s*(?P<suffix>%|[MBT]|million|billion|trillion)?",
+    r"(?P<prefix>\$)?"
+    r"(?P<num>\d+(?:,\d{3})*(?:\.\d+)?)"
+    r"\s*(?P<suffix>%|[MBT]|million|billion|trillion)?",
     re.I,
 )
 
-# Maximum claim length (characters)
-MAX_CLAIM_LENGTH = 200
 
-
-def _parse_number_token(m: re.Match) -> tuple[float, str | None] | None:
+def _parse_number(m: re.Match) -> tuple[float, str | None] | None:
     raw = m.group("num")
     if not raw:
         return None
@@ -74,127 +53,304 @@ def _parse_number_token(m: re.Match) -> tuple[float, str | None] | None:
             unit = "%" if unit is None else unit + "%"
         elif suf in {"m", "million"}:
             unit = "million" if unit is None else unit + " million"
-            if suf == "m":
-                val *= 1.0
         elif suf in {"b", "billion"}:
             unit = "billion" if unit is None else unit + " billion"
-            if suf == "b":
-                val *= 1.0
         elif suf in {"t", "trillion"}:
             unit = "trillion" if unit is None else unit + " trillion"
-            if suf == "t":
-                val *= 1.0
 
     return val, unit
 
 
-def _score_sensationalism(sentence: str) -> float:
-    """Score how sensational a sentence is (0-10 scale)."""
+def _extract_numbers(sentence: str) -> list[dict]:
+    """Pull verifiable numbers; strict year filtering."""
+    nums: list[dict] = []
+    for m in _NUMBER_RE.finditer(sentence):
+        parsed = _parse_number(m)
+        if parsed is None:
+            continue
+        val, unit = parsed
+
+        # Year filtering — keep only when temporal preposition + comparison
+        if unit is None and 1900 <= val <= 2100:
+            before = sentence[: m.start()].lower()
+            has_preposition = bool(
+                re.search(
+                    r"\b(?:in|since|by|from|before|after|during|until)\s*$",
+                    before,
+                )
+            )
+            has_comparison = bool(
+                re.search(
+                    r"\b(?:first|biggest|largest|worst|best|highest|lowest"
+                    r"|most|least|record|since|ever)\b",
+                    sentence,
+                    re.I,
+                )
+            )
+            if not (has_preposition and has_comparison):
+                continue
+
+        nums.append({"value": val, "unit": unit})
+    return nums
+
+
+# ---------------------------------------------------------------------------
+# Scoring signals  (each returns 0.0 – 3.0)
+# ---------------------------------------------------------------------------
+
+_DRAMATIC_RE = re.compile(
+    r"\b(?:surge[ds]?|soar(?:s|ed|ing)?|plunge[ds]?|crash(?:es|ed|ing)?"
+    r"|plummet(?:s|ed|ing)?|skyrocket(?:s|ed|ing)?|tank(?:s|ed|ing)?"
+    r"|collapse[ds]?|spike[ds]?|explode[ds]?|crater(?:s|ed|ing)?"
+    r"|tumble[ds]?|wipe[ds]?\s+out|double[ds]?|triple[ds]?|halve[ds]?)\b",
+    re.I,
+)
+
+_SUPERLATIVE_RE = re.compile(
+    r"\b(?:biggest|largest|worst|best|highest|lowest|most|least|first|last)"
+    r"\s+(?:ever|in\s+\d+\s+years?|since\s+\d{4}|in\s+history|on\s+record)\b",
+    re.I,
+)
+
+_SPECULATIVE_RE = re.compile(
+    r"\b(?:could|may|might|expected\s+to|predicted\s+to|set\s+to|poised\s+to)"
+    r"\s+(?:crash|collapse|surge|soar|plunge|double|triple|reach|hit|exceed"
+    r"|fall|drop|rise|skyrocket|plummet)\b",
+    re.I,
+)
+
+_DISTRESS_RE = re.compile(
+    r"\b(?:bankrupt(?:cy)?|insolven[ct]|default(?:s|ed)?|layoff[s]?"
+    r"|laid\s+off|cut\s+\d|fire[ds]?\s+\d|eliminat|shut(?:ting)?\s+down"
+    r"|wind(?:ing)?\s+down|crisis|catastroph|disaster|turmoil|panic"
+    r"|meltdown)\b",
+    re.I,
+)
+
+_HYPE_RE = re.compile(
+    r"\b(?:game[-\s]?changer|revolutionary|disruptive?"
+    r"|transformative?|breakthrough|unprecedented|paradigm\s+shift"
+    r"|moon(?:shot)?)\b",
+    re.I,
+)
+
+_AMPLIFIER_RE = re.compile(
+    r"\b(?:record|historic|massive|huge|enormous|staggering|shocking"
+    r"|stunning|remarkable)\b",
+    re.I,
+)
+
+
+def _score_dramatic(s: str) -> float:
+    return min(3.0, len(_DRAMATIC_RE.findall(s)) * 1.5)
+
+
+def _score_magnitude(s: str, nums: list[dict]) -> float:
     score = 0.0
-    
-    # Check for sensational patterns
-    sensational_matches = _SENSATIONAL_RE.findall(sentence)
-    score += len(sensational_matches) * 2.0
-    
-    # Check for large percentage moves (10%+ gets bonus)
-    pct_matches = re.findall(r"(\d+(?:\.\d+)?)\s*%", sentence)
-    for pct in pct_matches:
-        try:
-            val = float(pct)
-            if val >= 50:
+    for n in nums:
+        u = n.get("unit") or ""
+        v = n["value"]
+        if "%" in u:
+            if v >= 50:
                 score += 3.0
-            elif val >= 20:
+            elif v >= 20:
                 score += 2.0
-            elif val >= 10:
+            elif v >= 10:
                 score += 1.0
-        except:
-            pass
-    
-    # Check for large dollar amounts (billions get bonus)
-    if re.search(r"\$\s*\d+(?:\.\d+)?\s*(?:billion|trillion|B|T)\b", sentence, re.I):
-        score += 1.5
-    
-    # Penalty for boring/factual patterns
-    if _BORING_RE.search(sentence):
-        score -= 2.0
-    
-    # Bonus for exclamation marks or dramatic punctuation
-    if "!" in sentence:
-        score += 0.5
-    
-    # Bonus for quotes (often contain dramatic statements)
-    if '"' in sentence or "'" in sentence:
-        score += 0.5
-    
-    return max(0, score)
+            elif v >= 5:
+                score += 0.5
+        if "billion" in u or "trillion" in u:
+            score += 1.5
+        if "$" in u and v >= 100:
+            score += 0.5
+    return min(3.0, score)
 
 
-def _truncate_claim(text: str, max_len: int = MAX_CLAIM_LENGTH) -> str:
-    """Truncate a claim to max length, trying to break at sentence boundaries."""
+def _score_superlative(s: str) -> float:
+    return 3.0 if _SUPERLATIVE_RE.search(s) else 0.0
+
+
+def _score_speculative(s: str) -> float:
+    return 2.5 if _SPECULATIVE_RE.search(s) else 0.0
+
+
+def _score_distress(s: str) -> float:
+    return min(3.0, len(_DISTRESS_RE.findall(s)) * 1.5)
+
+
+def _score_hype(s: str) -> float:
+    return min(3.0, len(_HYPE_RE.findall(s)) * 2.0)
+
+
+def _score_amplifier(s: str) -> float:
+    return min(2.0, len(_AMPLIFIER_RE.findall(s)) * 1.0)
+
+
+# Penalties (negative) -------------------------------------------------------
+
+_ROUTINE_RE = re.compile(
+    r"(?:"
+    r"^\s*(?:the\s+)?company\s+(?:reported|announced|said|stated)\s+"
+    r"(?:that\s+)?(?:its\s+)?(?:Q\d|quarterly|annual)"
+    r"|^\s*(?:according\s+to|based\s+on|as\s+of|for\s+the\s+(?:quarter|year))"
+    r"|^\s*(?:revenue|earnings|net\s+income|EPS)\s+(?:was|were|came\s+in\s+at)"
+    r"|^\s*shares\s+(?:are\s+)?(?:trading|traded)\s+at"
+    r")",
+    re.I,
+)
+
+_ATTRIBUTION_RE = re.compile(
+    r"\b(?:according\s+to\s+(?:SEC|regulatory|official)|as\s+reported\s+by"
+    r"|data\s+(?:from|shows?|indicates?)|filings?\s+(?:show|reveal|indicate))\b",
+    re.I,
+)
+
+_HISTORICAL_RECAP_RE = re.compile(
+    r"\b(?:in\s+\d{4}\s*,|back\s+in\s+\d{4}|years?\s+ago|previously"
+    r"|at\s+the\s+time)\b",
+    re.I,
+)
+
+
+def _penalty_routine(s: str) -> float:
+    return -2.0 if _ROUTINE_RE.search(s) else 0.0
+
+
+def _penalty_attribution(s: str) -> float:
+    return -1.0 if _ATTRIBUTION_RE.search(s) else 0.0
+
+
+def _penalty_historical(s: str) -> float:
+    """Penalise sentences that purely recap old events."""
+    if not _HISTORICAL_RECAP_RE.search(s):
+        return 0.0
+    # Don't penalise if there's also forward-looking language
+    if re.search(r"\b(?:now|today|currently|going\s+forward|will|plan)\b", s, re.I):
+        return 0.0
+    return -1.5
+
+
+# ---------------------------------------------------------------------------
+# Category classification
+# ---------------------------------------------------------------------------
+
+_CATEGORY_MAP: list[tuple[re.Pattern, str]] = [
+    (_SPECULATIVE_RE, "Prediction"),
+    (_DISTRESS_RE, "Financial Distress"),
+    (_HYPE_RE, "Hype / Buzzword"),
+    (_SUPERLATIVE_RE, "Superlative"),
+    (_DRAMATIC_RE, "Dramatic Language"),
+]
+
+
+def _classify(s: str) -> str:
+    for rx, label in _CATEGORY_MAP:
+        if rx.search(s):
+            return label
+    return "Quantitative Claim"
+
+
+# ---------------------------------------------------------------------------
+# Minimum-quality gate
+# ---------------------------------------------------------------------------
+
+_CLAIM_HINT_RE = re.compile(
+    r"(\$\s?\d|\d\s?%|\b(?:million|billion|trillion)\b"
+    r"|\bEPS\b|\brevenue\b|\bguidance\b|\bforecast\b"
+    r"|\b(?:surge|plunge|crash|soar|skyrocket|plummet|record"
+    r"|unprecedented|stunning|shocking|remarkable)\b)",
+    re.I,
+)
+
+
+# ---------------------------------------------------------------------------
+# Truncation
+# ---------------------------------------------------------------------------
+
+MAX_CLAIM_LENGTH = 200
+
+
+def _truncate(text: str, max_len: int = MAX_CLAIM_LENGTH) -> str:
     if len(text) <= max_len:
         return text
-    
-    # Try to find a good break point
-    truncated = text[:max_len]
-    
-    # Look for last sentence-ending punctuation
-    for end_char in ['. ', '! ', '? ']:
-        last_idx = truncated.rfind(end_char)
-        if last_idx > max_len // 2:
-            return truncated[:last_idx + 1].strip()
-    
-    # Fall back to last comma or space
-    for break_char in [', ', ' ']:
-        last_idx = truncated.rfind(break_char)
-        if last_idx > max_len // 2:
-            return truncated[:last_idx].strip() + '...'
-    
-    return truncated.strip() + '...'
+    t = text[:max_len]
+    for end in [". ", "! ", "? "]:
+        idx = t.rfind(end)
+        if idx > max_len // 2:
+            return t[: idx + 1].strip()
+    for brk in [", ", " "]:
+        idx = t.rfind(brk)
+        if idx > max_len // 2:
+            return t[:idx].strip() + "..."
+    return t.strip() + "..."
 
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def extract_claims(text: str, limit: int = 10) -> list[dict]:
+    """Extract and rank the most sensational claims from *text*.
+
+    Returns a list of dicts with keys:
+      claim, numbers, evidence_sentence, sensational_score, category
+    """
     sentences = split_sentences(text)
-    scored_claims: list[tuple[float, dict]] = []
+    scored: list[tuple[float, dict]] = []
 
     for s in sentences:
         if not _CLAIM_HINT_RE.search(s):
             continue
-        
-        # Skip very short or very long sentences
         if len(s) < 30 or len(s) > 500:
             continue
 
-        nums = []
-        for m in _NUMBER_RE.finditer(s):
-            parsed = _parse_number_token(m)
-            if parsed is None:
-                continue
-            val, unit = parsed
-            # Avoid capturing years as claim numbers unless clearly a date context
-            if unit is None and 1900 <= val <= 2100 and not re.search(r"\b(?:in|since|during)\s+\d{4}\b", s, re.I):
-                continue
-            nums.append({"value": val, "unit": unit})
+        nums = _extract_numbers(s)
 
-        if not nums:
-            continue
-        
-        # Score the sensationalism of this claim
-        sensational_score = _score_sensationalism(s)
-        
-        # Truncate if too long
-        claim_text = _truncate_claim(s)
-
-        scored_claims.append(
-            (sensational_score, {
-                "claim": claim_text,
-                "numbers": nums,
-                "evidence_sentence": s,
-                "sensational_score": sensational_score,
-            })
+        # Composite score
+        raw = (
+            _score_dramatic(s)
+            + _score_magnitude(s, nums)
+            + _score_superlative(s)
+            + _score_speculative(s)
+            + _score_distress(s)
+            + _score_hype(s)
+            + _score_amplifier(s)
+            + _penalty_routine(s)
+            + _penalty_attribution(s)
+            + _penalty_historical(s)
         )
 
-    # Sort by sensationalism score (highest first)
-    scored_claims.sort(key=lambda x: x[0], reverse=True)
-    
-    # Return top claims
-    return [claim for _, claim in scored_claims[:limit]]
+        # Bonus for having concrete verifiable numbers (%, $, billion…)
+        verifiable = sum(
+            1
+            for n in nums
+            if n.get("unit") in {"%", "$", "$ million", "$ billion", "$ trillion",
+                                  "million", "billion", "trillion"}
+        )
+        raw += verifiable * 0.5
+
+        # Bonus for exclamation marks
+        if "!" in s:
+            raw += 0.5
+
+        score = max(0.0, min(10.0, raw))
+
+        # Minimum threshold
+        if score < 1.0:
+            continue
+
+        scored.append(
+            (
+                score,
+                {
+                    "claim": _truncate(s),
+                    "numbers": nums,
+                    "evidence_sentence": s,
+                    "sensational_score": round(score, 2),
+                    "category": _classify(s),
+                },
+            )
+        )
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [c for _, c in scored[:limit]]

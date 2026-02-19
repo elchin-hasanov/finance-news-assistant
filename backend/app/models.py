@@ -133,6 +133,8 @@ class Claim(BaseModel):
     claim: str
     numbers: list[NumberValue] = Field(default_factory=list)
     evidence_sentence: str
+    sensational_score: float = 0.0
+    category: str = "Quantitative Claim"
 
 
 class SentimentInfo(BaseModel):
