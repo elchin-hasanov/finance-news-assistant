@@ -236,28 +236,13 @@ function showResults() {
         `<span class="claim-number">${n.value}${n.unit || ''}</span>`
       ).join('');
 
-      // v3 enriched badges
-      const srcQ = claim.source_quality || 'unattributed';
-      const srcIcon = srcQ === 'official' ? '🏛️' : srcQ === 'named' ? '📰' : srcQ === 'vague' ? '❓' : '⚠️';
-      const srcLabel = srcQ === 'official' ? 'Official Source' : srcQ === 'named' ? 'Named Source' : srcQ === 'vague' ? 'Vague Source' : 'Unattributed';
-      
-      const emotional = claim.emotional_intensity || 0;
-      const emotionalLabel = emotional >= 2 ? '🔴 High' : emotional >= 1 ? '🟡 Medium' : '🟢 Low';
-      
-      const fwd = claim.forward_looking ? '<span class="claim-tag tag-fwd">🔮 Prediction</span>' : '';
-
       return `
         <div class="claim-item" data-index="${idx}">
           <div class="claim-header">
             <span class="claim-category cat-${catClass}">${cat}</span>
-            <span class="claim-score" title="Sensationalism score">${score}/10</span>
+            <span class="claim-score" title="Sensationalism score">${score}</span>
           </div>
           <div class="claim-text">${escapeHtml(claim.claim)}</div>
-          <div class="claim-meta">
-            <span class="claim-tag tag-src" title="${srcLabel}">${srcIcon} ${srcLabel}</span>
-            <span class="claim-tag tag-emotional" title="Emotional intensity">🎭 ${emotionalLabel}</span>
-            ${fwd}
-          </div>
           ${numbersHtml ? `<div class="claim-numbers">${numbersHtml}</div>` : ''}
         </div>
       `;
@@ -299,14 +284,14 @@ function populateReliability() {
 
   // Score number
   const scoreEl = document.getElementById('reliability-score');
-  if (scoreEl) scoreEl.textContent = score;
+  if (scoreEl) scoreEl.textContent = `${score}/100`;
 
   // Label
   const labelEl = document.getElementById('reliability-label');
   if (labelEl) {
     labelEl.textContent = label;
     labelEl.className = 'reliability-label ' + (
-      score >= 60 ? 'rel-good' : score >= 40 ? 'rel-mixed' : 'rel-bad'
+      score >= 50 ? 'rel-good' : 'rel-bad'
     );
   }
 
@@ -317,7 +302,7 @@ function populateReliability() {
     const pct = Math.max(0, Math.min(100, score)) / 100;
     const offset = 157 * (1 - pct);
     gaugeFill.style.strokeDashoffset = offset;
-    gaugeFill.style.stroke = score >= 60 ? '#10B981' : score >= 40 ? '#F59E0B' : '#EF4444';
+    gaugeFill.style.stroke = score >= 50 ? '#10B981' : '#EF4444';
   }
 
   // Signal breakdown

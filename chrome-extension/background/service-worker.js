@@ -55,14 +55,12 @@ function setDynamicIcon(tabId, score) {
     ctx.fillStyle = '#0F172A';
     ctx.fill();
 
-    // Pick colour based on score
+    // Pick colour based on score — binary green/red
     let color;
-    if (score >= 60) {
-      color = '#10B981'; // green
-    } else if (score >= 40) {
-      color = '#F59E0B'; // amber/yellow
+    if (score >= 50) {
+      color = '#10B981'; // green — reliable
     } else {
-      color = '#EF4444'; // red
+      color = '#EF4444'; // red — unreliable
     }
 
     // Draw chart line (same shape as original icon, scaled)
@@ -109,11 +107,8 @@ function setDynamicIcon(tabId, score) {
 
   chrome.action.setIcon({ tabId, imageData });
 
-  // Also set a badge with the score
-  const badgeColor = score >= 60 ? '#10B981' : score >= 40 ? '#F59E0B' : '#EF4444';
-  chrome.action.setBadgeBackgroundColor({ tabId, color: badgeColor });
-  chrome.action.setBadgeText({ tabId, text: String(score) });
-  chrome.action.setBadgeTextColor({ tabId, color: '#FFFFFF' });
+  // Clear any old badge — the icon colour itself conveys the signal
+  chrome.action.setBadgeText({ tabId, text: '' });
 }
 
 function roundRect(ctx, x, y, w, h, r) {

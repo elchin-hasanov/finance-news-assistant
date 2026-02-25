@@ -502,39 +502,6 @@ body {
   border-radius: 4px;
 }
 
-/* Claim enrichment tags (v3) */
-.claim-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 4px;
-}
-
-.claim-tag {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(148, 163, 184, 0.1);
-  color: #94A3B8;
-  white-space: nowrap;
-}
-
-.claim-tag.tag-src {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60A5FA;
-}
-
-.claim-tag.tag-emotional {
-  background: rgba(245, 158, 11, 0.1);
-  color: #F59E0B;
-}
-
-.claim-tag.tag-fwd {
-  background: rgba(139, 92, 246, 0.12);
-  color: #A78BFA;
-}
-
 /* ── Article Reliability ───────────────────────────────── */
 
 .reliability-card {
@@ -568,9 +535,10 @@ body {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 800;
   color: #F1F5F9;
+  white-space: nowrap;
 }
 
 .reliability-meta {
@@ -585,7 +553,6 @@ body {
 }
 
 .reliability-label.rel-good { color: #10B981; }
-.reliability-label.rel-mixed { color: #F59E0B; }
 .reliability-label.rel-bad { color: #EF4444; }
 
 .reliability-subtitle {
