@@ -9,6 +9,7 @@ from ..models import (
     ContentInfo,
     EntitiesInfo,
     MarketInfo,
+    ReliabilityInfo,
     TickerMarketContext,
     PolymarketInsight,
     SentimentInfo,
@@ -28,6 +29,7 @@ from .sentiment import analyze_sentiment, get_sentiment_label
 from .text_utils import normalize_whitespace
 from .summary import facts_only_summary
 from .polymarket import top_relevant_bets
+from .reliability import compute_reliability_score
 
 
 def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
@@ -131,6 +133,14 @@ def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
     # Sentiment analysis
     sentiment_result = analyze_sentiment(extracted_text)
     sentiment_label = get_sentiment_label(sentiment_result["sentiment_score"])
+
+    # Reliability scoring (comprehensive multi-signal)
+    reliability_result = compute_reliability_score(
+        extracted_text,
+        claims=claims_raw,
+        sentiment_score=sentiment_result["sentiment_score"],
+        neutral_ratio=sentiment_result["neutral_ratio"],
+    )
 
     facts_summary = facts_only_summary(
         extracted_text,
@@ -236,5 +246,10 @@ def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
             neutral_ratio=sentiment_result["neutral_ratio"],
         ),
     polymarket=polymarket_models,
+        reliability=ReliabilityInfo(
+            reliability_score=reliability_result["reliability_score"],
+            reliability_label=reliability_result["reliability_label"],
+            signals=reliability_result["signals"],
+        ),
         facts_only_summary=facts_summary,
     )

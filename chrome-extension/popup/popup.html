@@ -125,6 +125,29 @@
           </div>
         </div>
 
+        <!-- Article Reliability -->
+        <div id="reliability-section" class="result-section" style="display:none;">
+          <div class="section-header">
+            <h3>Article Reliability</h3>
+          </div>
+          <div class="reliability-card">
+            <div class="reliability-gauge-row">
+              <div class="reliability-gauge">
+                <svg viewBox="0 0 120 70" class="gauge-svg">
+                  <path d="M10 60 A50 50 0 0 1 110 60" fill="none" stroke="#1E293B" stroke-width="10" stroke-linecap="round"/>
+                  <path id="gauge-fill" d="M10 60 A50 50 0 0 1 110 60" fill="none" stroke="#10B981" stroke-width="10" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"/>
+                </svg>
+                <div class="gauge-score" id="reliability-score">—</div>
+              </div>
+              <div class="reliability-meta">
+                <div class="reliability-label" id="reliability-label">—</div>
+                <div class="reliability-subtitle">Based on 10 signals</div>
+              </div>
+            </div>
+            <div class="reliability-signals" id="reliability-signals"></div>
+          </div>
+        </div>
+
         <!-- Highlighted Sentences Info -->
         <div class="highlight-info">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

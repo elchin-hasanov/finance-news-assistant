@@ -211,6 +211,63 @@ _HISTORICAL_RECAP_RE = re.compile(
     re.I,
 )
 
+# ── v3 enrichment regexes ─────────────────────────────────────────
+
+_OFFICIAL_SOURCE_RE = re.compile(
+    r"\b(?:according\s+to\s+(?:the\s+)?(?:SEC|FDA|Federal|Bureau|Department|"
+    r"Treasury|company|CEO|CFO|COO|CTO|president|chairman|board|10-[KQ]|"
+    r"annual\s+report|filing|prospectus|disclosure|regulatory|official)|"
+    r"(?:SEC|regulatory|official)\s+filing[s]?\s+(?:show|reveal|indicate)|"
+    r"the\s+company\s+(?:said|stated|reported|confirmed|disclosed))\b",
+    re.I,
+)
+
+_NAMED_SOURCE_RE = re.compile(
+    r"\b(?:according\s+to\s+(?:Reuters|Bloomberg|AP|CNBC|WSJ|"
+    r"Wall\s+Street\s+Journal|Financial\s+Times|Barron'?s|"
+    r"MarketWatch|Moody'?s|S&P|Fitch|Goldman|Morgan\s+Stanley|"
+    r"JPMorgan|Bank\s+of\s+America|Citigroup|analysts?\s+at\s+\w+)|"
+    r"(?:as\s+)?reported\s+by\s+(?:Reuters|Bloomberg|AP|CNBC|WSJ)|"
+    r"\b[A-Z][a-z]+\s+[A-Z][a-z]+,?\s+(?:an?\s+)?(?:analyst|economist|"
+    r"strategist|portfolio\s+manager|CEO|CFO|CTO|director)\b)\b",
+    re.I,
+)
+
+_VAGUE_SOURCE_RE = re.compile(
+    r"\b(?:sources?\s+(?:say|said|claim|suggest|familiar)"
+    r"|(?:some|many|several)\s+(?:experts?|analysts?|observers?|insiders?)"
+    r"\s+(?:say|said|believe|think|expect)"
+    r"|(?:it\s+is\s+(?:said|believed|thought|rumou?red|reported))"
+    r"|(?:reportedly|allegedly|apparently|purportedly)"
+    r"|(?:unnamed|anonymous)\s+(?:source|official))\b",
+    re.I,
+)
+
+_EMOTIONAL_MARKERS_RE = re.compile(
+    r"\b(?:shocking|stunning|unbelievable|incredible|jaw[-\s]?dropping"
+    r"|mind[-\s]?blowing|insane|crazy|wild|epic|outrageous|ridiculous"
+    r"|astonishing|extraordinary|devastating|catastrophic|nightmare"
+    r"|amazing|fantastic|terrifying|horrifying)\b",
+    re.I,
+)
+
+_VAGUE_LANGUAGE_RE = re.compile(
+    r"\b(?:some\s+(?:people|analysts|experts)|many\s+(?:believe|think|say)"
+    r"|it\s+(?:seems|appears)|there\s+(?:are|is)\s+(?:growing|increasing)"
+    r"|(?:significant|substantial|considerable)\s+(?:amount|number|portion)"
+    r"|(?:a\s+lot|lots)\s+of"
+    r"|(?:various|numerous|countless|several)\s+(?:factors?|reasons?|issues?))\b",
+    re.I,
+)
+
+_FORWARD_LOOKING_RE = re.compile(
+    r"\b(?:could|may|might|will|expected\s+to|predicted\s+to|set\s+to"
+    r"|poised\s+to|likely\s+to|forecast|outlook|projection|guidance"
+    r"|forward[-\s]looking|going\s+forward|in\s+the\s+(?:coming|next)"
+    r"|by\s+(?:2025|2026|2027|2028|2029|2030|year[-\s]end))\b",
+    re.I,
+)
+
 
 def _penalty_routine(s: str) -> float:
     return -2.0 if _ROUTINE_RE.search(s) else 0.0
@@ -248,6 +305,48 @@ def _classify(s: str) -> str:
         if rx.search(s):
             return label
     return "Quantitative Claim"
+
+
+# ---------------------------------------------------------------------------
+# v3 enrichment helpers
+# ---------------------------------------------------------------------------
+
+def _assess_source_quality(s: str) -> str:
+    """Classify the source quality of a claim sentence."""
+    if _OFFICIAL_SOURCE_RE.search(s):
+        return "official"
+    if _NAMED_SOURCE_RE.search(s):
+        return "named"
+    if _VAGUE_SOURCE_RE.search(s):
+        return "vague"
+    return "unattributed"
+
+
+def _score_emotional_intensity(s: str) -> float:
+    """Score emotional intensity 0–3."""
+    hits = len(_EMOTIONAL_MARKERS_RE.findall(s))
+    exclaim = s.count("!")
+    caps = len(re.findall(r"\b[A-Z]{4,}\b", s))
+    raw = hits * 1.0 + exclaim * 0.5 + caps * 0.3
+    return min(3.0, raw)
+
+
+def _score_vagueness(s: str) -> float:
+    """Score how vague/unsubstantiated a claim is (0–3)."""
+    vague_hits = len(_VAGUE_LANGUAGE_RE.findall(s))
+    vague_source_hits = len(_VAGUE_SOURCE_RE.findall(s))
+    # Concrete numbers reduce vagueness
+    concrete = len(re.findall(
+        r"(?:\$\s?\d[\d,.]*|\d[\d,.]*\s*%|\d[\d,.]*\s+(?:million|billion|trillion))",
+        s, re.I,
+    ))
+    raw = (vague_hits + vague_source_hits) * 1.0 - concrete * 0.5
+    return max(0.0, min(3.0, raw))
+
+
+def _is_forward_looking(s: str) -> bool:
+    """Check if a sentence is forward-looking / speculative."""
+    return bool(_FORWARD_LOOKING_RE.search(s))
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +392,8 @@ def extract_claims(text: str, limit: int = 10) -> list[dict]:
     """Extract and rank the most sensational claims from *text*.
 
     Returns a list of dicts with keys:
-      claim, numbers, evidence_sentence, sensational_score, category
+      claim, numbers, evidence_sentence, sensational_score, category,
+      source_quality, emotional_intensity, vagueness_score, forward_looking
     """
     sentences = split_sentences(text)
     scored: list[tuple[float, dict]] = []
@@ -333,11 +433,26 @@ def extract_claims(text: str, limit: int = 10) -> list[dict]:
         if "!" in s:
             raw += 0.5
 
+        # v3: emotional intensity adds to score
+        emotional = _score_emotional_intensity(s)
+        raw += emotional * 0.5
+
+        # v3: vague unattributed claims are *more* sensational (less trustworthy)
+        vagueness = _score_vagueness(s)
+        source_q = _assess_source_quality(s)
+        if source_q == "unattributed" and vagueness >= 1.0:
+            raw += 0.5
+        # Well-attributed claims are less sensational
+        if source_q in ("official", "named"):
+            raw -= 1.0
+
         score = max(0.0, min(10.0, raw))
 
-        # Minimum threshold
-        if score < 1.0:
+        # Raised threshold: only truly sensational claims (was 1.0, now 2.0)
+        if score < 2.0:
             continue
+
+        forward = _is_forward_looking(s)
 
         scored.append(
             (
@@ -348,6 +463,10 @@ def extract_claims(text: str, limit: int = 10) -> list[dict]:
                     "evidence_sentence": s,
                     "sensational_score": round(score, 2),
                     "category": _classify(s),
+                    "source_quality": source_q,
+                    "emotional_intensity": round(emotional, 2),
+                    "vagueness_score": round(vagueness, 2),
+                    "forward_looking": forward,
                 },
             )
         )

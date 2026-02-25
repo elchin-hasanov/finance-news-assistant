@@ -19,8 +19,14 @@ def test_claim_has_category_and_score():
     for c in claims:
         assert "sensational_score" in c
         assert "category" in c
-        assert c["sensational_score"] >= 1.0
+        assert c["sensational_score"] >= 2.0
         assert isinstance(c["category"], str)
+        # v3 fields
+        assert "source_quality" in c
+        assert c["source_quality"] in {"official", "named", "vague", "unattributed"}
+        assert "emotional_intensity" in c
+        assert "vagueness_score" in c
+        assert "forward_looking" in c
 
 
 def test_bare_years_not_captured_as_numbers():

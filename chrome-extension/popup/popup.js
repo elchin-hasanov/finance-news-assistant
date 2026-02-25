@@ -162,6 +162,16 @@ function showResults() {
 
   showState('results');
 
+  // ── Dynamic toolbar icon based on reliability ──
+  const reliability = analysisResults.reliability;
+  if (reliability && currentTabId) {
+    chrome.runtime.sendMessage({
+      action: 'setReliabilityIcon',
+      tabId: currentTabId,
+      score: reliability.reliability_score,
+    }).catch(() => {});
+  }
+
   // Update ticker info
   const entities = analysisResults.entities || {};
   const market = analysisResults.market || {};
@@ -210,7 +220,7 @@ function showResults() {
   // Sort by sensational_score (backend already does this, but be safe),
   // then take top 5.
   const sensationalClaims = claims
-    .filter(c => (c.sensational_score || 0) >= 1.0)
+    .filter(c => (c.sensational_score || 0) >= 2.0)
     .sort((a, b) => (b.sensational_score || 0) - (a.sensational_score || 0))
     .slice(0, 5);
 
@@ -225,13 +235,29 @@ function showResults() {
       const numbersHtml = (claim.numbers || []).map(n =>
         `<span class="claim-number">${n.value}${n.unit || ''}</span>`
       ).join('');
+
+      // v3 enriched badges
+      const srcQ = claim.source_quality || 'unattributed';
+      const srcIcon = srcQ === 'official' ? '🏛️' : srcQ === 'named' ? '📰' : srcQ === 'vague' ? '❓' : '⚠️';
+      const srcLabel = srcQ === 'official' ? 'Official Source' : srcQ === 'named' ? 'Named Source' : srcQ === 'vague' ? 'Vague Source' : 'Unattributed';
+      
+      const emotional = claim.emotional_intensity || 0;
+      const emotionalLabel = emotional >= 2 ? '🔴 High' : emotional >= 1 ? '🟡 Medium' : '🟢 Low';
+      
+      const fwd = claim.forward_looking ? '<span class="claim-tag tag-fwd">🔮 Prediction</span>' : '';
+
       return `
         <div class="claim-item" data-index="${idx}">
           <div class="claim-header">
             <span class="claim-category cat-${catClass}">${cat}</span>
-            <span class="claim-score" title="Sensationalism score">${score}</span>
+            <span class="claim-score" title="Sensationalism score">${score}/10</span>
           </div>
           <div class="claim-text">${escapeHtml(claim.claim)}</div>
+          <div class="claim-meta">
+            <span class="claim-tag tag-src" title="${srcLabel}">${srcIcon} ${srcLabel}</span>
+            <span class="claim-tag tag-emotional" title="Emotional intensity">🎭 ${emotionalLabel}</span>
+            ${fwd}
+          </div>
           ${numbersHtml ? `<div class="claim-numbers">${numbersHtml}</div>` : ''}
         </div>
       `;
@@ -250,6 +276,86 @@ function showResults() {
   } else {
     claimsList.innerHTML = '<p class="empty-state">No sensational claims detected.</p>';
   }
+
+  // ── Reliability section ──
+  populateReliability();
+}
+
+function populateReliability() {
+  const section = document.getElementById('reliability-section');
+  if (!section) return;
+
+  const rel = analysisResults?.reliability;
+  if (!rel) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+
+  const score = rel.reliability_score ?? 0;
+  const label = rel.reliability_label || '—';
+  const signals = rel.signals || {};
+
+  // Score number
+  const scoreEl = document.getElementById('reliability-score');
+  if (scoreEl) scoreEl.textContent = score;
+
+  // Label
+  const labelEl = document.getElementById('reliability-label');
+  if (labelEl) {
+    labelEl.textContent = label;
+    labelEl.className = 'reliability-label ' + (
+      score >= 60 ? 'rel-good' : score >= 40 ? 'rel-mixed' : 'rel-bad'
+    );
+  }
+
+  // Gauge arc (stroke-dashoffset drives the fill)
+  // The arc path length is ~157. Full fill = offset 0; empty = offset 157.
+  const gaugeFill = document.getElementById('gauge-fill');
+  if (gaugeFill) {
+    const pct = Math.max(0, Math.min(100, score)) / 100;
+    const offset = 157 * (1 - pct);
+    gaugeFill.style.strokeDashoffset = offset;
+    gaugeFill.style.stroke = score >= 60 ? '#10B981' : score >= 40 ? '#F59E0B' : '#EF4444';
+  }
+
+  // Signal breakdown
+  const container = document.getElementById('reliability-signals');
+  if (!container) return;
+
+  // Nice names for signals
+  const signalNames = {
+    source_attribution: { label: 'Source Attribution', icon: '📄', max: 15 },
+    hedging_nuance: { label: 'Hedging & Nuance', icon: '⚖️', max: 10 },
+    numerical_evidence: { label: 'Numerical Evidence', icon: '🔢', max: 10 },
+    neutral_tone: { label: 'Neutral Tone', icon: '😐', max: 15 },
+    balanced_perspective: { label: 'Balanced Perspective', icon: '🔄', max: 10 },
+    hype_penalty: { label: 'Hype Language', icon: '📢', max: -15 },
+    sensational_claims_penalty: { label: 'Sensational Claims', icon: '⚡', max: -10 },
+    speculation_penalty: { label: 'Speculation', icon: '🔮', max: -10 },
+    emotional_intensity_penalty: { label: 'Emotional Intensity', icon: '🎭', max: -10 },
+    urgency_penalty: { label: 'Urgency / Pressure', icon: '⏰', max: -5 },
+  };
+
+  container.innerHTML = Object.entries(signals).map(([key, value]) => {
+    const info = signalNames[key] || { label: key, icon: '•', max: 10 };
+    const isPositive = value >= 0;
+    const absVal = Math.abs(value);
+    const absMax = Math.abs(info.max);
+    const pct = Math.min(100, (absVal / absMax) * 100);
+    const barClass = isPositive ? 'signal-bar-positive' : 'signal-bar-negative';
+    return `
+      <div class="signal-row">
+        <span class="signal-icon">${info.icon}</span>
+        <span class="signal-name">${info.label}</span>
+        <div class="signal-bar-track">
+          <div class="signal-bar-fill ${barClass}" style="width:${pct}%"></div>
+        </div>
+        <span class="signal-value ${isPositive ? 'positive' : 'negative'}">${value > 0 ? '+' : ''}${value}</span>
+      </div>
+    `;
+  }).join('');
 }
 
 function setupPrimaryRangeControls() {

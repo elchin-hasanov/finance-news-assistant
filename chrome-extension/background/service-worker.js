@@ -1,6 +1,6 @@
 /**
  * Finance News Analyzer - Background Service Worker
- * Handles background tasks and message passing
+ * Handles background tasks, message passing, and dynamic icon updates
  */
 
 // Listen for extension icon click (as backup to popup)
@@ -27,7 +27,114 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true; // Keep channel open for async response
   }
+
+  if (message.action === 'setReliabilityIcon') {
+    const { tabId, score } = message;
+    setDynamicIcon(tabId, score);
+    sendResponse({ success: true });
+    return false;
+  }
 });
+
+/**
+ * Draw a coloured icon on an OffscreenCanvas and set it as the extension icon.
+ * Green (reliable) → Yellow (mixed) → Red (unreliable).
+ */
+function setDynamicIcon(tabId, score) {
+  const sizes = [16, 32, 48, 128];
+  const imageData = {};
+
+  for (const size of sizes) {
+    const canvas = new OffscreenCanvas(size, size);
+    const ctx = canvas.getContext('2d');
+
+    // Background rounded rect
+    const r = Math.round(size * 0.1875); // ~24/128
+    ctx.beginPath();
+    roundRect(ctx, 0, 0, size, size, r);
+    ctx.fillStyle = '#0F172A';
+    ctx.fill();
+
+    // Pick colour based on score
+    let color;
+    if (score >= 60) {
+      color = '#10B981'; // green
+    } else if (score >= 40) {
+      color = '#F59E0B'; // amber/yellow
+    } else {
+      color = '#EF4444'; // red
+    }
+
+    // Draw chart line (same shape as original icon, scaled)
+    const s = size / 128;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(2, 8 * s);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(24 * s, 80 * s);
+    ctx.lineTo(48 * s, 56 * s);
+    ctx.lineTo(64 * s, 72 * s);
+    ctx.lineTo(104 * s, 32 * s);
+    ctx.stroke();
+
+    // Arrow tip
+    ctx.beginPath();
+    ctx.moveTo(80 * s, 32 * s);
+    ctx.lineTo(104 * s, 32 * s);
+    ctx.lineTo(104 * s, 56 * s);
+    ctx.stroke();
+
+    // Bar chart at bottom
+    const barColor1 = '#334155';
+    const bars = [
+      { x: 24, y: 88, w: 16, h: 24 },
+      { x: 48, y: 80, w: 16, h: 32 },
+    ];
+    const barsColored = [
+      { x: 72, y: 72, w: 16, h: 40 },
+      { x: 96, y: 64, w: 16, h: 48 },
+    ];
+
+    for (const b of bars) {
+      roundedBar(ctx, b.x * s, b.y * s, b.w * s, b.h * s, 2 * s, barColor1);
+    }
+    for (const b of barsColored) {
+      roundedBar(ctx, b.x * s, b.y * s, b.w * s, b.h * s, 2 * s, color);
+    }
+
+    imageData[size] = ctx.getImageData(0, 0, size, size);
+  }
+
+  chrome.action.setIcon({ tabId, imageData });
+
+  // Also set a badge with the score
+  const badgeColor = score >= 60 ? '#10B981' : score >= 40 ? '#F59E0B' : '#EF4444';
+  chrome.action.setBadgeBackgroundColor({ tabId, color: badgeColor });
+  chrome.action.setBadgeText({ tabId, text: String(score) });
+  chrome.action.setBadgeTextColor({ tabId, color: '#FFFFFF' });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function roundedBar(ctx, x, y, w, h, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  roundRect(ctx, x, y, w, h, r);
+  ctx.fill();
+}
 
 /**
  * Fetch data from API (can be used to bypass CORS if needed)

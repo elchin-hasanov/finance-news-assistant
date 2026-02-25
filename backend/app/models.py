@@ -135,6 +135,11 @@ class Claim(BaseModel):
     evidence_sentence: str
     sensational_score: float = 0.0
     category: str = "Quantitative Claim"
+    # v3 enriched metrics
+    source_quality: str = "unattributed"  # "official", "named", "vague", "unattributed"
+    emotional_intensity: float = 0.0  # 0–3
+    vagueness_score: float = 0.0  # 0–3 (higher = more vague)
+    forward_looking: bool = False  # is this a prediction / speculation?
 
 
 class SentimentInfo(BaseModel):
@@ -153,6 +158,12 @@ class PolymarketInsight(BaseModel):
     reason: str | None = None
 
 
+class ReliabilityInfo(BaseModel):
+    reliability_score: int  # 0–100, higher = more reliable
+    reliability_label: str  # human-readable
+    signals: dict[str, float] = Field(default_factory=dict)  # breakdown
+
+
 class AnalyzeResponse(BaseModel):
     source: SourceInfo
     content: ContentInfo
@@ -162,6 +173,7 @@ class AnalyzeResponse(BaseModel):
     claims: list[Claim] = Field(default_factory=list)
     sentiment: SentimentInfo
     polymarket: list[PolymarketInsight] = Field(default_factory=list)
+    reliability: ReliabilityInfo | None = None
     facts_only_summary: str
 
 
