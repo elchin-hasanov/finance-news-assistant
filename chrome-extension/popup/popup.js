@@ -174,7 +174,11 @@ function showResults() {
       const pct = market.day_move_pct;
       const sign = pct >= 0 ? '+' : '';
       changeValue.textContent = `${sign}${pct.toFixed(2)}%`;
-      tickerChange.className = `ticker-change ${pct >= 0 ? 'positive' : 'negative'}`;
+      // Use range-based color so badge matches the chart line
+      const rangePos = (market.price_series && market.price_series.length > 1)
+        ? isRangePositive(market.price_series, primaryRange)
+        : pct >= 0;
+      tickerChange.className = `ticker-change ${rangePos ? 'positive' : 'negative'}`;
     } else {
       changeValue.textContent = '—';
       tickerChange.className = 'ticker-change neutral';
@@ -184,8 +188,14 @@ function showResults() {
     if (market.price_series && market.price_series.length > 0) {
       setupPrimaryRangeControls();
       updateRangePercentages(market.price_series);
-      drawPrimaryChart(market.price_series, market.day_move_pct >= 0);
+      // Determine color from the *displayed range*, not the daily move
+      const rangePositive = isRangePositive(market.price_series, primaryRange);
+      drawPrimaryChart(market.price_series, rangePositive);
     }
+
+    // --- S&P 500 Market Comparison ---
+    populateMarketComparison(entities.primary_ticker, market.price_series);
+
   } else {
     tickerSymbol.textContent = '—';
     tickerName.textContent = 'No ticker detected';
@@ -197,24 +207,35 @@ function showResults() {
   // Update claims
   const claims = analysisResults.claims || [];
   
-  // Filter to top 3 most "sensational" (those with numbers/percentages)
+  // Sort by sensational_score (backend already does this, but be safe),
+  // then take top 5.
   const sensationalClaims = claims
-    .filter(c => c.numbers && c.numbers.length > 0)
-    .slice(0, 3);
+    .filter(c => (c.sensational_score || 0) >= 1.0)
+    .sort((a, b) => (b.sensational_score || 0) - (a.sensational_score || 0))
+    .slice(0, 5);
 
   claimsCount.textContent = sensationalClaims.length;
 
   if (sensationalClaims.length > 0) {
-    claimsList.innerHTML = sensationalClaims.map((claim, idx) => `
-      <div class="claim-item" data-index="${idx}">
-        <div class="claim-text">${escapeHtml(claim.claim)}</div>
-        <div class="claim-numbers">
-          ${claim.numbers.map(n => `
-            <span class="claim-number">${n.value}${n.unit || ''}</span>
-          `).join('')}
+    claimsList.innerHTML = sensationalClaims.map((claim, idx) => {
+      const score = (claim.sensational_score || 0).toFixed(1);
+      const cat = escapeHtml(claim.category || 'Claim');
+      const catClass = (claim.category || '')
+        .toLowerCase().replace(/[^a-z]/g, '-').replace(/-+/g, '-');
+      const numbersHtml = (claim.numbers || []).map(n =>
+        `<span class="claim-number">${n.value}${n.unit || ''}</span>`
+      ).join('');
+      return `
+        <div class="claim-item" data-index="${idx}">
+          <div class="claim-header">
+            <span class="claim-category cat-${catClass}">${cat}</span>
+            <span class="claim-score" title="Sensationalism score">${score}</span>
+          </div>
+          <div class="claim-text">${escapeHtml(claim.claim)}</div>
+          ${numbersHtml ? `<div class="claim-numbers">${numbersHtml}</div>` : ''}
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     // Add click handlers to scroll to claim in article
     document.querySelectorAll('.claim-item').forEach(item => {
@@ -227,7 +248,7 @@ function showResults() {
       });
     });
   } else {
-    claimsList.innerHTML = '<p class="empty-state">No sensational claims with numbers found.</p>';
+    claimsList.innerHTML = '<p class="empty-state">No sensational claims detected.</p>';
   }
 }
 
@@ -246,10 +267,23 @@ function setupPrimaryRangeControls() {
       buttons.forEach(b => b.classList.toggle('active', b.dataset.range === r));
       const market = analysisResults?.market;
       if (market?.price_series?.length) {
-        drawPrimaryChart(market.price_series, market.day_move_pct >= 0);
+        const rangePos = isRangePositive(market.price_series, r);
+        drawPrimaryChart(market.price_series, rangePos);
       }
     });
   });
+}
+
+/**
+ * Determine whether the price went up or down over the given range.
+ * Used to pick green (up) vs red (down) for chart line + fill.
+ */
+function isRangePositive(series, range) {
+  const sliced = sliceSeriesByRange(series, range);
+  if (sliced.length < 2) return true; // default green if insufficient data
+  const first = sliced[0].close;
+  const last = sliced[sliced.length - 1].close;
+  return last >= first;
 }
 
 function sliceSeriesByRange(series, range) {
@@ -440,4 +474,92 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// -------------------------------------------------------------------
+// S&P 500 Market Comparison
+// -------------------------------------------------------------------
+
+/**
+ * Populate the "vs S&P 500" comparison section.
+ * Pulls the SPY series from analysisResults.markets and compares range %
+ * against the primary ticker's series.
+ */
+function populateMarketComparison(primaryTicker, tickerSeries) {
+  const compSection = document.getElementById('market-comparison');
+  if (!compSection) return;
+
+  // Find SPY in the markets array
+  const markets = analysisResults?.markets || [];
+  const spyData = markets.find(m => m.ticker && m.ticker.toUpperCase() === 'SPY');
+  const spySeries = spyData?.price_series;
+
+  if (!spySeries || spySeries.length < 2 || !tickerSeries || tickerSeries.length < 2) {
+    compSection.style.display = 'none';
+    return;
+  }
+
+  compSection.style.display = '';
+
+  const ranges = ['5D', '1M', '6M'];
+
+  // Set ticker labels
+  for (const r of ranges) {
+    const lbl = document.getElementById(`comp-ticker-label-${r}`);
+    if (lbl) lbl.textContent = primaryTicker || 'TICK';
+  }
+
+  let tickerWins = 0;
+  let spyWins = 0;
+
+  for (const r of ranges) {
+    const tickerPct = calcRangePercentage(tickerSeries, r);
+    const spyPct = calcRangePercentage(spySeries, r);
+
+    const tickerEl = document.getElementById(`comp-ticker-${r}`);
+    const spyEl = document.getElementById(`comp-spy-${r}`);
+
+    if (tickerEl) {
+      if (tickerPct !== null) {
+        const sign = tickerPct >= 0 ? '+' : '';
+        tickerEl.textContent = `${sign}${tickerPct.toFixed(1)}%`;
+        tickerEl.className = `comp-value ${tickerPct >= 0 ? 'positive' : 'negative'}`;
+      } else {
+        tickerEl.textContent = '—';
+        tickerEl.className = 'comp-value';
+      }
+    }
+
+    if (spyEl) {
+      if (spyPct !== null) {
+        const sign = spyPct >= 0 ? '+' : '';
+        spyEl.textContent = `${sign}${spyPct.toFixed(1)}%`;
+        spyEl.className = `comp-value ${spyPct >= 0 ? 'positive' : 'negative'}`;
+      } else {
+        spyEl.textContent = '—';
+        spyEl.className = 'comp-value';
+      }
+    }
+
+    // Track who's outperforming
+    if (tickerPct !== null && spyPct !== null) {
+      if (tickerPct > spyPct) tickerWins++;
+      else if (spyPct > tickerPct) spyWins++;
+    }
+  }
+
+  // Verdict
+  const verdictEl = document.getElementById('comparison-verdict');
+  if (verdictEl) {
+    if (tickerWins > spyWins) {
+      verdictEl.textContent = '▲ Outperforming market';
+      verdictEl.className = 'comparison-verdict outperform';
+    } else if (spyWins > tickerWins) {
+      verdictEl.textContent = '▼ Underperforming market';
+      verdictEl.className = 'comparison-verdict underperform';
+    } else {
+      verdictEl.textContent = '● Tracking market';
+      verdictEl.className = 'comparison-verdict tracking';
+    }
+  }
 }

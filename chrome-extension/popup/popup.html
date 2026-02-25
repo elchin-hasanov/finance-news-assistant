@@ -65,6 +65,43 @@
             </div>
           </div>
 
+          <!-- Market Comparison -->
+          <div id="market-comparison" class="market-comparison" style="display:none;">
+            <div class="comparison-header">
+              <span class="comparison-label">vs S&amp;P 500</span>
+              <span id="comparison-verdict" class="comparison-verdict"></span>
+            </div>
+            <div class="comparison-rows">
+              <div class="comparison-row">
+                <span class="comp-range-label">5D</span>
+                <div class="comp-bar-group">
+                  <span class="comp-ticker-label" id="comp-ticker-label-5D">TICK</span>
+                  <span class="comp-value" id="comp-ticker-5D">—</span>
+                  <span class="comp-spy-label">SPY</span>
+                  <span class="comp-value" id="comp-spy-5D">—</span>
+                </div>
+              </div>
+              <div class="comparison-row">
+                <span class="comp-range-label">1M</span>
+                <div class="comp-bar-group">
+                  <span class="comp-ticker-label" id="comp-ticker-label-1M">TICK</span>
+                  <span class="comp-value" id="comp-ticker-1M">—</span>
+                  <span class="comp-spy-label">SPY</span>
+                  <span class="comp-value" id="comp-spy-1M">—</span>
+                </div>
+              </div>
+              <div class="comparison-row">
+                <span class="comp-range-label">6M</span>
+                <div class="comp-bar-group">
+                  <span class="comp-ticker-label" id="comp-ticker-label-6M">TICK</span>
+                  <span class="comp-value" id="comp-ticker-6M">—</span>
+                  <span class="comp-spy-label">SPY</span>
+                  <span class="comp-value" id="comp-spy-6M">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
             <div class="primary-range" role="group" aria-label="Price range">
               <button class="rangeBtn" data-range="5D"><span class="range-label">5D</span><span class="range-pct" id="pct-5D"></span></button>
               <button class="rangeBtn active" data-range="1M"><span class="range-label">1M</span><span class="range-pct" id="pct-1M"></span></button>

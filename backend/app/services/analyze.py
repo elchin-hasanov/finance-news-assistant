@@ -117,7 +117,13 @@ def analyze_article(req: AnalyzeRequest) -> AnalyzeResponse:
     primary_ticker = choose_primary_ticker(tickers, text=extracted_text, headline=headline)
 
     market_res = fetch_market_context(primary_ticker)
-    markets_res = fetch_markets_context(tickers)
+
+    # Always include SPY (S&P 500 proxy) so the popup can show a market comparison.
+    tickers_with_spy = list(tickers)
+    if "SPY" not in [t.upper() for t in tickers_with_spy]:
+        tickers_with_spy.append("SPY")
+
+    markets_res = fetch_markets_context(tickers_with_spy)
 
     claims_raw = extract_claims(extracted_text, limit=10)
     claims = [Claim(**c) for c in claims_raw]

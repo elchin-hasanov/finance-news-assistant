@@ -282,6 +282,107 @@ body {
   color: #10b981;
 }
 
+/* ── S&P 500 Market Comparison ─────────────────────────── */
+
+.market-comparison {
+  margin-top: 10px;
+  background: #1E293B;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.comparison-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.comparison-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #94A3B8;
+}
+
+.comparison-verdict {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.comparison-verdict.outperform {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+}
+
+.comparison-verdict.underperform {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+}
+
+.comparison-verdict.tracking {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94A3B8;
+}
+
+.comparison-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.comparison-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.comp-range-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748B;
+  width: 22px;
+  flex-shrink: 0;
+}
+
+.comp-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.comp-ticker-label,
+.comp-spy-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #94A3B8;
+  width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.comp-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94A3B8;
+  min-width: 52px;
+}
+
+.comp-value.positive {
+  color: #10B981;
+}
+
+.comp-value.negative {
+  color: #EF4444;
+}
+
+/* ── End Market Comparison ─────────────────────────────── */
+
 #primaryChart {
   display: block;
   width: 100%;
@@ -322,6 +423,61 @@ body {
 .claim-item:hover {
   background: #334155;
   transform: translateX(2px);
+}
+
+.claim-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.claim-category {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+}
+
+/* Category-specific colours */
+.claim-category.cat-prediction {
+  background: rgba(139, 92, 246, 0.15);
+  color: #A78BFA;
+}
+.claim-category.cat-financial-distress {
+  background: rgba(239, 68, 68, 0.15);
+  color: #F87171;
+}
+.claim-category.cat-hype---buzzword {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+}
+.claim-category.cat-superlative {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60A5FA;
+}
+.claim-category.cat-dramatic-language {
+  background: rgba(251, 146, 60, 0.15);
+  color: #FB923C;
+}
+.claim-category.cat-quantitative-claim {
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+}
+
+.claim-score {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94A3B8;
+  background: rgba(148, 163, 184, 0.1);
+  padding: 1px 7px;
+  border-radius: 10px;
+  min-width: 24px;
+  text-align: center;
 }
 
 .claim-text {

@@ -681,10 +681,11 @@ def fetch_market_context(primary_ticker: str | None) -> MarketResult:
         return res
 
     closes_all = _winsorize_series(df["Close"].dropna())
-    closes_1m = closes_all.tail(32)
+    # Return up to 6 months (~132 trading days) so the popup can do 5D/1M/6M ranges + S&P comparison.
+    closes_6m = closes_all.tail(132)
     closes_stats = closes_all.tail(60)
 
-    series = [{"date": idx.date().isoformat(), "close": float(val)} for idx, val in closes_1m.items()]
+    series = [{"date": idx.date().isoformat(), "close": float(val)} for idx, val in closes_6m.items()]
     if not series:
         series_av = fetch_daily_series_1mo(t)
         res = MarketResult(
@@ -866,7 +867,7 @@ def fetch_market_context_light(ticker: str | None) -> MarketResult:
     - Avoid expensive / rate-limit-prone calls for benchmarks and peer baskets.
 
     Returned fields:
-    - price_series (1mo)
+    - price_series (up to 6 months for benchmarks like SPY, 1 month otherwise)
     - day_move_pct / vol_20d / move_zscore (best-effort)
     - minimal meta (data_source, last_close_date, price_series_days)
 
@@ -876,15 +877,17 @@ def fetch_market_context_light(ticker: str | None) -> MarketResult:
         return MarketResult(price_series=[], day_move_pct=None, vol_20d=None, move_zscore=None)
 
     t = _normalize_ticker(ticker)
-    # NOTE: We intentionally do NOT use the main cache, because fetch_market_context()
-    # caches the fully computed object. We don't want to accidentally compute heavy
-    # benchmarks for many tickers and keep them around.
+
+    # SPY / benchmark tickers need 6M of data for the popup comparison section.
+    is_benchmark = t in {"SPY", "QQQ", "DIA", "IWM"}
+    yf_period = "1y" if is_benchmark else "1mo"
+    tail_days = 132 if is_benchmark else 32
 
     # Best-effort: try yfinance for a small window only.
     df = pd.DataFrame()
     data_source: str | None = None
     try:
-        df = yf.download(t, period="1mo", interval="1d", auto_adjust=True, progress=False, threads=False)
+        df = yf.download(t, period=yf_period, interval="1d", auto_adjust=True, progress=False, threads=False)
         df = _coerce_ohlcv_df(df)
         if df is not None and not df.empty and "Close" in df.columns:
             data_source = "yfinance"
@@ -911,10 +914,10 @@ def fetch_market_context_light(ticker: str | None) -> MarketResult:
         )
 
     closes = df["Close"].dropna()
-    closes_1m = closes.tail(32)
+    closes_window = closes.tail(tail_days)
     closes_stats = closes.tail(60)
 
-    series = [{"date": idx.date().isoformat(), "close": float(val)} for idx, val in closes_1m.items()]
+    series = [{"date": idx.date().isoformat(), "close": float(val)} for idx, val in closes_window.items()]
 
     day_move_pct = None
     try:
