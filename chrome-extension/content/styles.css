@@ -56,6 +56,12 @@
   transform: translateY(0);
 }
 
+/* When pinned (clicked), add a subtle ring so user knows it's locked */
+#fna-chart-tooltip.pinned {
+  border-color: #F59E0B;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(245, 158, 11, 0.4);
+}
+
 .fna-tooltip-header {
   display: flex;
   justify-content: space-between;

@@ -12,6 +12,8 @@
   let currentPriceSeries = [];
   let currentTicker = null;
   let allTickerData = {};
+  let tooltipPinned = false;   // true when user clicked to lock the tooltip open
+  let pinnedTicker = null;     // ticker that was pinned
 
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -184,7 +186,26 @@
   /**
    * NEW: Highlight all company names and tickers across the entire document.
    * This scans for both explicit tickers (AMZN, MSFT) and company names (Amazon, Microsoft).
+   *
+   * IMPORTANT: Company-name matches from the mapping must appear with at least
+   * Title Case (or ALL CAPS) in the actual article text to avoid false positives
+   * on common English words like "total", "block", "united", "target", "delta".
    */
+
+  // Common English words that also happen to be company-name keys in the mapping.
+  // These are ONLY highlighted when they appear capitalised AND in a financial context
+  // (adjacent to a $ sign, ticker notation, or another known company).
+  // For safety we just skip them entirely during the broad sweep — they'd cause
+  // far more false positives than true positives on a typical news page.
+  const AMBIGUOUS_COMPANY_WORDS = new Set([
+    'total', 'block', 'united', 'target', 'delta', 'ford', 'shell', 'chase',
+    'lilly', 'lucid', 'hinge', 'unity', 'simon', 'marsh', 'sands', 'dover',
+    'eaton', 'devon', 'magna', 'spirit', 'apollo', 'oracle', 'orange',
+    'big 5', 'tide', 'gap', 'hut 8', 'link', 'zoom', 'snap', 'wish',
+    'lam', 'sce', 'j j', 'p g', 'at t', 'dow', 'visa', 'nike', 'coke',
+    'moody', 'corona', 'sierra', 'kohls', 'macys',
+  ]);
+
   function highlightCompaniesAndTickers(primaryTicker) {
     const primaryUpper = primaryTicker ? String(primaryTicker).toUpperCase() : null;
     
@@ -195,6 +216,8 @@
     for (const [name, ticker] of Object.entries(COMPANY_TO_TICKER)) {
       // Skip primary ticker's company name to avoid over-highlighting the main subject
       if (primaryUpper && ticker === primaryUpper) continue;
+      // Skip ambiguous common English words entirely — too many false positives
+      if (AMBIGUOUS_COMPANY_WORDS.has(name.toLowerCase().trim())) continue;
       patterns.push({ pattern: name, ticker, isCompanyName: true });
     }
     
@@ -273,20 +296,35 @@
       const rx = new RegExp(`\\b${_escapeRegExp(p.pattern)}\\b`, 'gi');
       let m;
       while ((m = rx.exec(original)) !== null) {
+        const matchedText = m[0];
+
+        // For company-name patterns: require the match to be capitalised in the
+        // actual article text (Title Case or ALL CAPS). A fully lowercase occurrence
+        // like "total sales" or "block of shares" is almost certainly not a company.
+        if (p.isCompanyName) {
+          const firstChar = matchedText.charAt(0);
+          if (firstChar === firstChar.toLowerCase()) continue;
+        }
+
         matches.push({
           start: m.index,
-          end: m.index + m[0].length,
-          text: m[0],
+          end: m.index + matchedText.length,
+          text: matchedText,
           ticker: p.ticker,
         });
       }
     }
     
-    // Find ticker matches
+    // Find ticker matches (only ALL-CAPS sequences — never lowercase)
     let tm;
     while ((tm = tickerRx.exec(original)) !== null) {
       const ticker = (tm[1] || tm[2] || tm[4] || tm[5] || '').toUpperCase();
       if (!ticker || ticker.length < 2) continue;
+
+      // The captured text must actually be uppercase in the source.
+      // tm[5] is the bare \b[A-Z]{2,5}\b branch; verify the literal text is all-caps.
+      const rawMatch = tm[0];
+      if (tm[5] && rawMatch !== rawMatch.toUpperCase()) continue;
       
       // Skip common false positives
       const stopWords = new Set([
@@ -345,6 +383,7 @@
       span.addEventListener('mouseenter', handleHighlightHover);
       span.addEventListener('mouseleave', handleHighlightLeave);
       span.addEventListener('mousemove', handleHighlightMove);
+      span.addEventListener('click', handleHighlightClick);
       
       frag.appendChild(span);
       highlightedElements.push(span);
@@ -455,6 +494,7 @@
       span.addEventListener('mouseenter', handleHighlightHover);
       span.addEventListener('mouseleave', handleHighlightLeave);
       span.addEventListener('mousemove', handleHighlightMove);
+      span.addEventListener('click', handleHighlightClick);
 
       frag.appendChild(span);
       highlightedElements.push(span);
@@ -565,16 +605,53 @@
 
     // Range selection
     chartTooltip.querySelectorAll('.fna-range-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // prevent click-outside handler from closing
         chartTooltip.querySelectorAll('.fna-range-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         chartTooltip.dataset.range = btn.dataset.range;
-        // Redraw using current series but filtered for the chosen range.
+
+        // Refresh header stats for the new range
+        const displayed = getDisplayedSeries();
+        const changeEl = chartTooltip.querySelector('.fna-tooltip-change');
+        const periodEl = chartTooltip.querySelector('.fna-tooltip-period');
+        const startDateEl = chartTooltip.querySelector('.fna-tooltip-start-date');
+        const endDateEl = chartTooltip.querySelector('.fna-tooltip-end-date');
+        const priceEl = chartTooltip.querySelector('.fna-tooltip-price');
+
+        if (displayed.length >= 2) {
+          const first = displayed[0].close;
+          const last = displayed[displayed.length - 1].close;
+          const change = ((last - first) / first) * 100;
+          const sign = change >= 0 ? '+' : '';
+          changeEl.textContent = `${sign}${change.toFixed(2)}%`;
+          changeEl.className = `fna-tooltip-change ${change >= 0 ? 'positive' : 'negative'}`;
+          startDateEl.textContent = new Date(displayed[0].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          endDateEl.textContent = new Date(displayed[displayed.length - 1].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        if (periodEl) periodEl.textContent = `${displayed.length} days`;
+        const lastClose = displayed.at(-1)?.close;
+        if (priceEl) priceEl.textContent = (lastClose != null) ? `$${lastClose.toFixed(2)}` : '—';
+
+        // Redraw chart for the chosen range
         drawTooltipChart();
       });
     });
 
   chartTooltip.dataset.range = '1M';
+
+    // Click-outside-to-close: if user clicks anywhere that isn't inside the
+    // tooltip or a highlight span, unpin and hide.
+    document.addEventListener('click', _onDocumentClick, true);
+  }
+
+  function _onDocumentClick(e) {
+    if (!tooltipPinned) return;
+    // If click is inside the tooltip itself (e.g. range buttons), keep it open
+    if (chartTooltip && chartTooltip.contains(e.target)) return;
+    // If click is on a highlight span, handleHighlightClick will handle it
+    if (e.target.closest && e.target.closest('.fna-highlight')) return;
+    _unpinTooltip();
   }
   
   // Handle hovering over the chart for crosshair and point info
@@ -631,13 +708,45 @@
    * Handle hover on highlighted text
    */
   function handleHighlightHover(e) {
+    // If tooltip is pinned, don't change it on hover
+    if (tooltipPinned) return;
     if (!chartTooltip) return;
 
+    _showTooltipForElement(e.target, e);
+  }
+
+  /**
+   * Handle click on highlighted text — pin/unpin the tooltip
+   */
+  function handleHighlightClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!chartTooltip) return;
+
+    const clickedTicker = (e.target.dataset.ticker || currentTicker || '').toUpperCase();
+
+    // If already pinned on this same ticker, unpin
+    if (tooltipPinned && pinnedTicker === clickedTicker) {
+      _unpinTooltip();
+      return;
+    }
+
+    // Show tooltip for the clicked ticker, then pin it
+    _showTooltipForElement(e.target, e);
+    tooltipPinned = true;
+    pinnedTicker = clickedTicker;
+    chartTooltip.classList.add('pinned');
+  }
+
+  /**
+   * Internal: populate and show the tooltip for a given highlight element
+   */
+  function _showTooltipForElement(el, mouseEvent) {
     // Get ticker for this specific highlight (may differ from primary)
-    const highlightTicker = (e.target.dataset.ticker || currentTicker || '').toUpperCase();
+    const highlightTicker = (el.dataset.ticker || currentTicker || '').toUpperCase();
 
     // Swap series based on highlighted ticker.
-    // If we don't have a series for that ticker, fall back to primary.
     const seriesForHighlight = allTickerData?.[highlightTicker];
     const seriesForPrimary = allTickerData?.[(currentTicker || '').toUpperCase()];
     const nextSeries = (Array.isArray(seriesForHighlight) && seriesForHighlight.length)
@@ -656,8 +765,8 @@
     const startDateEl = chartTooltip.querySelector('.fna-tooltip-start-date');
     const endDateEl = chartTooltip.querySelector('.fna-tooltip-end-date');
 
-  tickerEl.textContent = highlightTicker || 'Stock';
-    
+    tickerEl.textContent = highlightTicker || 'Stock';
+
     const displayed = getDisplayedSeries();
     if (displayed.length >= 2) {
       const first = displayed[0].close;
@@ -666,8 +775,7 @@
       const sign = change >= 0 ? '+' : '';
       changeEl.textContent = `${sign}${change.toFixed(2)}%`;
       changeEl.className = `fna-tooltip-change ${change >= 0 ? 'positive' : 'negative'}`;
-      
-      // Show date range
+
       const startDate = new Date(displayed[0].date);
       const endDate = new Date(displayed[displayed.length - 1].date);
       startDateEl.textContent = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -680,12 +788,21 @@
     const lastClose = displayed.at(-1)?.close;
     if (priceEl) priceEl.textContent = (lastClose != null) ? `$${lastClose.toFixed(2)}` : '—';
 
-    // Draw chart
     drawTooltipChart();
 
-    // Show tooltip
     chartTooltip.classList.add('visible');
-    positionTooltip(e);
+    positionTooltip(mouseEvent);
+  }
+
+  /**
+   * Internal: unpin and hide the tooltip
+   */
+  function _unpinTooltip() {
+    tooltipPinned = false;
+    pinnedTicker = null;
+    if (chartTooltip) {
+      chartTooltip.classList.remove('pinned', 'visible');
+    }
   }
 
   function getDisplayedSeries() {
@@ -708,6 +825,8 @@
    * Handle mouse leave on highlighted text
    */
   function handleHighlightLeave() {
+    // Don't hide if pinned
+    if (tooltipPinned) return;
     if (chartTooltip) {
       chartTooltip.classList.remove('visible');
     }
@@ -717,6 +836,8 @@
    * Handle mouse move on highlighted text
    */
   function handleHighlightMove(e) {
+    // Don't reposition if pinned
+    if (tooltipPinned) return;
     positionTooltip(e);
   }
 
@@ -872,6 +993,11 @@
    * Clear all highlights
    */
   function clearHighlights() {
+    // Reset pin state
+    tooltipPinned = false;
+    pinnedTicker = null;
+    document.removeEventListener('click', _onDocumentClick, true);
+
     highlightedElements.forEach(el => {
       const text = document.createTextNode(el.textContent);
       el.parentNode.replaceChild(text, el);

@@ -330,18 +330,22 @@ function populateReliability() {
   // Nice names for signals
   const signalNames = {
     source_attribution: { label: 'Source Attribution', icon: '📄', max: 15 },
-    hedging_nuance: { label: 'Hedging & Nuance', icon: '⚖️', max: 10 },
     numerical_evidence: { label: 'Numerical Evidence', icon: '🔢', max: 10 },
-    neutral_tone: { label: 'Neutral Tone', icon: '😐', max: 15 },
-    balanced_perspective: { label: 'Balanced Perspective', icon: '🔄', max: 10 },
-    hype_penalty: { label: 'Hype Language', icon: '📢', max: -15 },
-    sensational_claims_penalty: { label: 'Sensational Claims', icon: '⚡', max: -10 },
-    speculation_penalty: { label: 'Speculation', icon: '🔮', max: -10 },
-    emotional_intensity_penalty: { label: 'Emotional Intensity', icon: '🎭', max: -10 },
-    urgency_penalty: { label: 'Urgency / Pressure', icon: '⏰', max: -5 },
+    hedging_language: { label: 'Hedging & Nuance', icon: '⚖️', max: 8 },
+    balanced_perspective: { label: 'Balanced Perspective', icon: '�', max: 10 },
+    factual_density: { label: 'Factual Density', icon: '�', max: 7 },
+    article_length: { label: 'Article Length', icon: '�', max: 5 },
+    hype_penalty: { label: 'Hype Language', icon: '📢', max: -20 },
+    claims_penalty: { label: 'Sensational Claims', icon: '⚡', max: -15 },
+    sentiment_extreme: { label: 'Sentiment Extreme', icon: '🎭', max: -10 },
+    urgency_penalty: { label: 'Urgency / Pressure', icon: '⏰', max: -10 },
+    formatting_penalty: { label: 'Formatting (!!!/CAPS)', icon: '🔤', max: -10 },
+    neutral_ratio_penalty: { label: 'Low Neutrality', icon: '😐', max: -5 },
   };
 
-  container.innerHTML = Object.entries(signals).map(([key, value]) => {
+  container.innerHTML = Object.entries(signals)
+    .filter(([, value]) => value !== 0)
+    .map(([key, value]) => {
     const info = signalNames[key] || { label: key, icon: '•', max: 10 };
     const isPositive = value >= 0;
     const absVal = Math.abs(value);
