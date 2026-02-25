@@ -99,8 +99,26 @@ async function analyzeArticle() {
   showState('loading');
 
   try {
-    // Get article content from content script
-    const response = await chrome.tabs.sendMessage(currentTabId, { action: 'getArticleContent' });
+    // Get article content from content script.
+    // If the content script isn't injected yet (extension reload, restricted page, etc.)
+    // we programmatically inject it first.
+    let response;
+    try {
+      response = await chrome.tabs.sendMessage(currentTabId, { action: 'getArticleContent' });
+    } catch (_connErr) {
+      // Content script not loaded — inject it, then retry.
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: currentTabId },
+          files: ['content/companyMapping.js', 'content/content.js']
+        });
+        // Brief delay to let script initialise
+        await new Promise(r => setTimeout(r, 200));
+        response = await chrome.tabs.sendMessage(currentTabId, { action: 'getArticleContent' });
+      } catch (injectErr) {
+        throw new Error('Cannot analyze this page. Please navigate to a news article and try again.');
+      }
+    }
     
     if (!response || !response.text) {
       throw new Error('Could not extract article content from this page.');
