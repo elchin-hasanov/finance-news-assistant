@@ -5,9 +5,18 @@
 
 const DEFAULT_API_URL = 'http://localhost:8000';
 
+const TELEMETRY_DEFAULT_ENABLED = false;
+
 // State
 let currentTabId = null;
 let analysisResults = null;
+
+// Telemetry state (opt-in)
+let telemetryEnabled = TELEMETRY_DEFAULT_ENABLED;
+let telemetrySessionId = null;
+let telemetryInstallId = null;
+let currentPageUrl = null;
+let currentPageDomain = null;
 
 // DOM Elements
 const initialState = document.getElementById('initial-state');
@@ -19,7 +28,95 @@ const analyzeBtn = document.getElementById('analyze-btn');
 const clearBtn = document.getElementById('clear-btn');
 const retryBtn = document.getElementById('retry-btn');
 const apiUrlInput = document.getElementById('api-url');
+const telemetryToggle = document.getElementById('telemetry-enabled');
 const errorMessage = document.getElementById('error-message');
+
+function nowMs() {
+  return Date.now();
+}
+
+async function sendTelemetryEvent(event_type, fields = {}) {
+  if (!telemetryEnabled) return;
+
+  const apiUrl = apiUrlInput?.value || DEFAULT_API_URL;
+  const payload = {
+    event_type,
+    ts_ms: nowMs(),
+    session_id: telemetrySessionId,
+    install_id: telemetryInstallId,
+    page_url: currentPageUrl,
+    page_domain: currentPageDomain,
+    ...fields,
+  };
+
+  try {
+    await fetch(`${apiUrl}/telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // Never break core UX due to telemetry.
+  }
+}
+
+// Section view-time tracking (popup viewport)
+const sectionTimers = new Map(); // sectionId -> { startMs, totalMs }
+let sectionObserver = null;
+
+function getSectionElements() {
+  return [
+    { id: 'ticker', el: document.getElementById('ticker-section') },
+    { id: 'claims', el: document.getElementById('claims-section') },
+    { id: 'reliability', el: document.getElementById('reliability-section') },
+  ].filter(x => x.el);
+}
+
+function startSectionObserver() {
+  if (sectionObserver) return;
+
+  sectionObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const sectionId = entry.target?.dataset?.telemetrySection;
+      if (!sectionId) continue;
+
+      const st = sectionTimers.get(sectionId) || { startMs: null, totalMs: 0 };
+      if (entry.isIntersecting) {
+        if (st.startMs == null) st.startMs = nowMs();
+      } else {
+        if (st.startMs != null) {
+          st.totalMs += (nowMs() - st.startMs);
+          st.startMs = null;
+        }
+      }
+      sectionTimers.set(sectionId, st);
+    }
+  }, { threshold: [0.6] });
+
+  for (const { id, el } of getSectionElements()) {
+    el.dataset.telemetrySection = id;
+    sectionObserver.observe(el);
+  }
+}
+
+function flushSectionTimes() {
+  for (const [sectionId, st] of sectionTimers.entries()) {
+    if (st.startMs != null) {
+      st.totalMs += (nowMs() - st.startMs);
+      st.startMs = null;
+    }
+    if (st.totalMs > 0) {
+      sendTelemetryEvent('section_view', {
+        section_id: sectionId,
+        duration_ms: Math.round(st.totalMs),
+      });
+    }
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  flushSectionTimes();
+});
 
 // Ticker elements
 const tickerSymbol = document.getElementById('ticker-symbol');
@@ -39,12 +136,28 @@ const claimsList = document.getElementById('claims-list');
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   // Load saved API URL
-  const stored = await chrome.storage.local.get(['apiUrl']);
+  const stored = await chrome.storage.local.get(['apiUrl', 'telemetryEnabled', 'telemetryInstallId']);
   apiUrlInput.value = stored.apiUrl || DEFAULT_API_URL;
+
+  telemetryEnabled = typeof stored.telemetryEnabled === 'boolean'
+    ? stored.telemetryEnabled
+    : TELEMETRY_DEFAULT_ENABLED;
+  if (telemetryToggle) telemetryToggle.checked = telemetryEnabled;
+
+  telemetryInstallId = stored.telemetryInstallId || (crypto?.randomUUID?.() || String(Date.now()));
+  await chrome.storage.local.set({ telemetryInstallId });
+  telemetrySessionId = crypto?.randomUUID?.() || String(Date.now());
 
   // Get current tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTabId = tab.id;
+
+  currentPageUrl = tab.url || null;
+  try {
+    currentPageDomain = currentPageUrl ? new URL(currentPageUrl).hostname : null;
+  } catch {
+    currentPageDomain = null;
+  }
 
   // Check if we have existing results for this tab
   const tabResults = await chrome.storage.session.get([`results_${currentTabId}`]);
@@ -52,12 +165,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     analysisResults = tabResults[`results_${currentTabId}`];
     showResults();
   }
+
+  // Popup open
+  sendTelemetryEvent('extension_used', { meta: { hasCachedResults: Boolean(tabResults[`results_${currentTabId}`]) } });
 });
 
 // Save API URL on change
 apiUrlInput.addEventListener('change', () => {
   chrome.storage.local.set({ apiUrl: apiUrlInput.value });
 });
+
+if (telemetryToggle) {
+  telemetryToggle.addEventListener('change', async () => {
+    telemetryEnabled = Boolean(telemetryToggle.checked);
+    await chrome.storage.local.set({ telemetryEnabled });
+    sendTelemetryEvent('telemetry_toggle', { meta: { enabled: telemetryEnabled } });
+  });
+}
 
 // Analyze button click
 analyzeBtn.addEventListener('click', analyzeArticle);
@@ -143,6 +267,14 @@ async function analyzeArticle() {
     // Store results for this tab
     await chrome.storage.session.set({ [`results_${currentTabId}`]: analysisResults });
 
+    sendTelemetryEvent('analyze_success', {
+      meta: {
+        hasUrl: Boolean(response.url),
+        claimsCount: Array.isArray(analysisResults?.claims) ? analysisResults.claims.length : 0,
+        reliabilityScore: analysisResults?.reliability?.reliability_score ?? null,
+      }
+    });
+
     // Send highlights to content script
     const markets = analysisResults.markets || [];
     const tickerPriceSeries = {};
@@ -168,6 +300,8 @@ async function analyzeArticle() {
     console.error('Analysis failed:', error);
     errorMessage.textContent = error.message || 'Could not analyze the article. Please try again.';
     showState('error');
+
+  sendTelemetryEvent('analyze_error', { meta: { message: String(error?.message || error) } });
   }
 }
 
@@ -179,6 +313,13 @@ function showResults() {
   }
 
   showState('results');
+
+  // Start section timing once results view is active.
+  startSectionObserver();
+
+  // Link telemetry: treat any anchor rendered inside results as an impression.
+  // (This will be 0 unless the UI actually includes links.)
+  instrumentLinks();
 
   // ── Dynamic toolbar icon based on reliability ──
   const reliability = analysisResults.reliability;
@@ -282,6 +423,57 @@ function showResults() {
 
   // ── Reliability section ──
   populateReliability();
+}
+
+let linksInstrumented = false;
+const seenLinkImpressions = new Set();
+
+function getDomain(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function instrumentLinks() {
+  if (linksInstrumented) return;
+  linksInstrumented = true;
+
+  // Capture clicks anywhere in the popup.
+  document.addEventListener('click', (e) => {
+    const a = e.target?.closest?.('a');
+    if (!a) return;
+    const url = a.href;
+    if (!url) return;
+
+    sendTelemetryEvent('link_click', {
+      link_url: url,
+      link_domain: getDomain(url),
+      link_kind: a.dataset?.linkKind || null,
+    });
+  }, true);
+
+  // Impressions: any anchor present at instrument time.
+  // If you add more links dynamically later, call instrumentLinks() again
+  // (it will be a no-op for handler, but we can still record impressions).
+  recordLinkImpressions(document.querySelectorAll('a[href]'));
+}
+
+function recordLinkImpressions(nodeList) {
+  for (const a of nodeList) {
+    const url = a.href;
+    if (!url) continue;
+    const key = `${url}|${a.dataset?.linkKind || ''}`;
+    if (seenLinkImpressions.has(key)) continue;
+    seenLinkImpressions.add(key);
+
+    sendTelemetryEvent('link_impression', {
+      link_url: url,
+      link_domain: getDomain(url),
+      link_kind: a.dataset?.linkKind || null,
+    });
+  }
 }
 
 function populateReliability() {

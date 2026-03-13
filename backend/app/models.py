@@ -20,6 +20,42 @@ class AnalyzeRequest(BaseModel):
     text: str | None = None
 
 
+class TelemetryEvent(BaseModel):
+    """Minimal telemetry event sent from the extension (opt-in).
+
+    Notes
+    -----
+    We keep this intentionally small and avoid taking raw article text.
+    """
+
+    event_type: str  # e.g. "extension_used", "section_view", "link_impression", "link_click"
+    ts_ms: int  # epoch milliseconds (client-side)
+
+    # Session/user identifiers (anonymous)
+    session_id: str | None = None
+    install_id: str | None = None
+
+    # Page context
+    page_url: str | None = None
+    page_domain: str | None = None
+
+    # Feature-specific fields
+    section_id: str | None = None  # e.g. "reliability", "claims", "market"
+    duration_ms: int | None = None
+
+    link_url: str | None = None
+    link_domain: str | None = None
+    link_kind: str | None = None  # e.g. "source", "polymarket", "external"
+
+    # Optional debug/info payload
+    meta: dict[str, Any] | None = None
+
+
+class TelemetryIngestResponse(BaseModel):
+    ok: bool = True
+    inserted: int = 1
+
+
 class SourceInfo(BaseModel):
     url: str | None
     title: str | None

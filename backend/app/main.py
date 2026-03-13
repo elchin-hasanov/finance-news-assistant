@@ -7,12 +7,17 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .settings import get_settings
 from .api.routes import router
+from .services.telemetry_db import init_db
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(title="De-Hype Financial News API", version="0.1.0")
+
+    # Telemetry DB is local SQLite by default. Safe to call multiple times.
+    # If you don't want telemetry, just don't call the endpoint.
+    init_db()
 
     app.add_middleware(
         CORSMiddleware,
